@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Chat } from "./Chat";
+import { unloadImageModel, type GeneratedImage } from "./diffusion";
+import { Images } from "./Images";
 import { Models } from "./Models";
 import { Settings } from "./Settings";
 import { Sidebar } from "./Sidebar";
 import { isReady, streamChat } from "./llm";
-import { usePersistent, type Chat as ChatT, type Message, type Settings as SettingsT } from "./store";
+import { usePersistent, type Chat as ChatT, type Message, type Settings as SettingsT, type View } from "./store";
 import { useEngine } from "./useEngine";
 
 const DEFAULT_SETTINGS: SettingsT = { model: "", systemPrompt: "", temperature: 0.7, theme: "system" };
@@ -13,12 +15,13 @@ export function App() {
   const [chats, setChats] = usePersistent<ChatT[]>("chats", []);
   const [settings, setSettings] = usePersistent("settings", DEFAULT_SETTINGS);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [view, setView] = useState<"chat" | "models">("chat");
+  const [gallery, setGallery] = usePersistent<GeneratedImage[]>("images", []);
+  const [view, setView] = useState<View>("chat");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-  const { engine, models, progress, info, refresh } = useEngine();
+  const { engine, models, progress, info, refresh, diffusion, imageModels } = useEngine();
   const ready = models.filter(isReady);
   const active = chats.find((c) => c.id === activeId);
   const defaultModel = ready.some((m) => m.id === settings.model) ? settings.model : (ready[0]?.id ?? "");
@@ -60,6 +63,8 @@ export function App() {
     abortRef.current = ctrl;
     setStreaming(true);
     try {
+      // free the image model first: a chat model and an image model may not both fit in memory
+      if (diffusion.status === "ready") await unloadImageModel(diffusion).catch(() => {});
       for await (const t of streamChat(engine, history, chat.model, settings, ctrl.signal)) append(t.content, t.reasoning);
     } catch (e) {
       if (!ctrl.signal.aborted) append(`\n\n**Error:** ${e instanceof Error ? e.message : String(e)}`);
@@ -80,17 +85,30 @@ export function App() {
         <Sidebar
           chats={chats}
           activeId={activeId}
-          modelsOpen={view === "models"}
+          view={view}
           onSelect={openChat}
           onNew={() => openChat(null)}
           onDelete={remove}
           onModels={() => setView("models")}
+          onImages={() => setView("images")}
           onSettings={() => setSettingsOpen(true)}
           onCollapse={() => setSidebarOpen(false)}
         />
       )}
-      {view === "models" ? (
-        <Models engine={engine} models={models} progress={progress} info={info} sidebarOpen={sidebarOpen} onExpand={() => setSidebarOpen(true)} refresh={refresh} />
+      <Images
+        hidden={view !== "images"}
+        diffusion={diffusion}
+        engine={engine}
+        models={models}
+        imageModels={imageModels}
+        gallery={gallery}
+        setGallery={setGallery}
+        sidebarOpen={sidebarOpen}
+        onExpand={() => setSidebarOpen(true)}
+        onOpenModels={() => setView("models")}
+      />
+      {view === "images" ? null : view === "models" ? (
+        <Models engine={engine} models={models} imageModels={imageModels} progress={progress} info={info} sidebarOpen={sidebarOpen} onExpand={() => setSidebarOpen(true)} refresh={refresh} />
       ) : (
         <Chat
           chat={active}

@@ -2,12 +2,13 @@
 
 A ChatGPT-style desktop chat app for macOS that runs language models entirely on your Mac. It's built with Electron, React, Vite and TypeScript, and uses llama.cpp's `llama-server` to run the models.
 
-You browse GGUF models on Hugging Face, download them inside the app, and chat with them. No data leaves your machine except the model downloads and the Hugging Face catalog searches.
+You browse GGUF models on Hugging Face, download them inside the app, and chat with them. It also generates images locally, using stable-diffusion.cpp's `sd-server`. No data leaves your machine except the model downloads and the Hugging Face catalog searches.
 
 ## Requirements
 
 - A Mac with Apple Silicon (M1 or later). The bundled llama.cpp build is arm64 only.
 - Node.js 20 or newer (`node -v`)
+- git, cmake and the Xcode Command Line Tools, to build `sd-server` (`brew install cmake`, `xcode-select --install`)
 
 ## Setup
 
@@ -21,11 +22,17 @@ If Electron fails with "Electron failed to install correctly", npm skipped its d
 npx install-electron
 ```
 
-The first `npm run dev` also downloads a pinned llama.cpp build (about 17 MB) into `resources/llama/`. To fetch it on its own:
+The first `npm run dev` also downloads a pinned llama.cpp build (about 17 MB) into `resources/llama/`, and builds a pinned stable-diffusion.cpp `sd-server` into `resources/sd/` (a minute or two). To do either on its own:
 
 ```bash
 node scripts/fetch-llama.js
 ```
+
+```bash
+node scripts/fetch-sd.js
+```
+
+`sd-server` is built from source rather than downloaded because upstream has no API key option yet. `scripts/sd-server-api-key.patch` adds one, so other apps and websites can't use the server.
 
 ## Run
 
@@ -33,9 +40,9 @@ node scripts/fetch-llama.js
 | --- | --- |
 | `npm run dev` | Opens the app in an Electron window with hot reload. Use this for day-to-day work. |
 | `npm start` | Builds the UI and runs it in Electron without the dev server. |
-| `npm run dist` | Packages `release/Photon-<version>-arm64.dmg`, with llama.cpp bundled. |
+| `npm run dist` | Packages `release/Photon-<version>-arm64.dmg`, with llama.cpp and sd-server bundled. |
 | `npm run web` | Runs only the UI at http://localhost:1420 in a browser. The model engine isn't available there. |
-| `npm test` | Runs the catalog checks (quantization names, grouping, default quant). |
+| `npm test` | Runs the catalog checks (quantization names, grouping, default quant) and the downloader checks (resume, size mismatch). |
 
 Hot reload covers everything in `src/`. If you change anything in `electron/`, stop `npm run dev` and start it again.
 
@@ -48,6 +55,12 @@ The `.dmg` isn't code-signed. The first time you open it, macOS will block it: r
 3. Click a model to see where you can download it from: the official publisher and the trusted quantizers (ggml-org, unsloth, bartowski, lmstudio-community). Each source has a quantization picker with exact file sizes, defaulting to a 4-bit file.
 4. Click **Download**. Progress appears there and in the **Downloaded** tab, where you can pause, resume or delete.
 5. Start a new chat (⌘N) and pick the model in the header. It loads into memory on the first message.
+
+To generate images:
+
+1. Open **Models → Discover** and download a model under **Image Generation**. Each one is a diffusion model, a text encoder and a VAE; files shared between models are downloaded once.
+2. Open **Images** in the sidebar, describe the image, pick a size and click **Generate**. A preview updates on every step. On an M5 Pro, Z-Image Turbo takes about 75 s at 1024×1024 and FLUX.2 klein 4B about 15 s at 768×768.
+3. Click an image to see its prompt and seed, reuse them, show it in Finder or delete it.
 
 Models are stored in `~/Library/Application Support/Photon/models` by default. To use a different folder, go to **Settings → Models folder → Change…**. Changing the folder doesn't move models you've already downloaded.
 
@@ -63,13 +76,21 @@ React UI ──fetch──▶ Hugging Face API            catalog: search, file 
                   POST   /models/unload         pause a download
                   DELETE /models?model=…        delete a model
                   POST   /v1/chat/completions   chat (streamed; loads the model on demand)
-Electron main: starts and stops llama-server, owns the models folder and config
+    └──fetch──▶ sd-server (127.0.0.1, random port + API key)
+                  GET    /sdcpp/v1/model-files       image model files on disk
+                  POST   /sdcpp/v1/models/load       load a recipe with its files
+                  POST   /sdcpp/v1/img_gen           start a generation job
+                  GET    /sdcpp/v1/jobs/{id}         job status, live preview, result
+Electron main: starts and stops both servers, owns the models folder and config,
+               downloads image models, saves generated images
 ```
 
 - **Startup.** On launch, `electron/engine.js` starts `llama-server` with no model, which puts it in "router mode", and points it at the models folder with the `LLAMA_CACHE` environment variable. Each launch gets a free port and a fresh API key, so other apps and websites can't use the server.
-- **Memory.** `--models-max 1` keeps one model in memory at a time. `--sleep-idle-seconds 600` frees that memory after 10 minutes without use.
-- **Logs.** The server's output goes to `~/Library/Application Support/Photon/llama-server.log`.
+- **Memory.** `--models-max 1` keeps one model in memory at a time. `--sleep-idle-seconds 600` frees that memory after 10 minutes without use. Generating an image unloads the chat model, and sending a chat message unloads the image model.
+- **Image models.** sd-server can't download models, so the main process does: files go to `<models folder>/diffusion/{diffusion_models,text_encoders,vae}` and resume from `.part` files. The list of image models and their files is `electron/imageModels.json`. Generated images are saved as PNGs in `~/Library/Application Support/Photon/images`.
+- **Logs.** The servers' output goes to `llama-server.log` and `sd-server.log` in `~/Library/Application Support/Photon/`.
 - **Upgrading llama.cpp.** Change `BUILD` in `scripts/fetch-llama.js` to a newer release from https://github.com/ggml-org/llama.cpp/releases.
+- **Upgrading stable-diffusion.cpp.** Change `TAG` in `scripts/fetch-sd.js` to a newer release from https://github.com/leejet/stable-diffusion.cpp/releases. If the patch no longer applies, update it against `examples/server/main.cpp`.
 
 ## Shortcuts
 
@@ -84,13 +105,19 @@ Electron main: starts and stops llama-server, owns the models folder and config
 
 ```
 electron/main.js      Window, config.json, IPC handlers (folder picker, disk info)
-electron/engine.js    Starts, health-checks and stops llama-server
+electron/engine.js    Starts, health-checks and stops a local server (llama-server, sd-server)
+electron/imageModels.js  Image model download status, download/pause/delete
+electron/imageModels.json  The image models offered and the files each needs
+electron/download.js  Resumable file download (tested by download.test.js)
 electron/preload.cjs  Exposes window.photon (engine state, folder actions) to the UI
 scripts/dev.js        Starts Vite, then Electron pointed at it
 scripts/fetch-llama.js  Downloads the pinned llama.cpp build into resources/llama
+scripts/fetch-sd.js   Builds the pinned, patched sd-server into resources/sd
 src/App.tsx           App state: chats, views, streaming, shortcuts
 src/useEngine.ts      Engine state, downloaded models, live download progress
 src/llm.ts            llama-server client: models, downloads, streaming chat
+src/diffusion.ts      sd-server client: load an image model, run and poll a generation
+src/Images.tsx        Images screen: prompt, live preview, gallery, image viewer
 src/catalog.ts        Model families, Hugging Face search grouped by base model, quantization sizes
 src/Models.tsx        Models screen: Downloaded and Discover tabs
 src/Chat.tsx          Model picker, messages (markdown, thinking), composer
@@ -98,7 +125,7 @@ src/Sidebar.tsx       Models link, chat list, settings
 src/Settings.tsx      Default model, models folder, system prompt, temperature, theme
 src/store.ts          Types and a hook that saves state to localStorage
 src/styles.css        Light/dark theme and all styling
-resources/            App icon, and llama.cpp once fetched (not committed)
+resources/            App icon, and llama.cpp and sd-server once fetched (not committed)
 ```
 
 Chats are saved in `localStorage`. Move them to SQLite in the main process once your chat history gets large.

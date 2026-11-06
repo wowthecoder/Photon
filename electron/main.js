@@ -1,8 +1,10 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { engineState, startEngine, stopEngine } from "./engine.js";
+import { pathToFileURL } from "node:url";
+import { createEngine } from "./engine.js";
+import { createImageModels } from "./imageModels.js";
 
 const configPath = () => path.join(app.getPath("userData"), "config.json");
 const readConfig = () => {
@@ -15,8 +17,33 @@ const readConfig = () => {
 const writeConfig = (patch) => fs.writeFileSync(configPath(), JSON.stringify({ ...readConfig(), ...patch }, null, 2));
 const modelsDir = () => readConfig().modelsDir ?? path.join(app.getPath("userData"), "models");
 
-const broadcast = (s) => BrowserWindow.getAllWindows().forEach((w) => w.webContents.send("engine", s));
-const restart = () => startEngine(modelsDir(), broadcast);
+const diffusionDir = () => path.join(modelsDir(), "diffusion");
+
+const llm = createEngine({ name: "llama-server", bin: "llama/llama-server", health: "/health", fetchScript: "fetch-llama.js" });
+const sd = createEngine({ name: "sd-server", bin: "sd/sd-server", health: "/sdcpp/v1/models/status", fetchScript: "fetch-sd.js" });
+
+const broadcast = (channel) => (s) => BrowserWindow.getAllWindows().forEach((w) => w.webContents.send(channel, s));
+const restartLlm = () =>
+  llm.start(modelsDir(), (port, apiKey) => ({
+    args: ["--host", "127.0.0.1", "--port", String(port), "--api-key", apiKey, "--models-max", "1", "--sleep-idle-seconds", "600"],
+    env: { LLAMA_CACHE: modelsDir() },
+  }), broadcast("engine"));
+const restartSd = () =>
+  sd.start(diffusionDir(), (port, apiKey) => ({
+    args: ["--listen-ip", "127.0.0.1", "--listen-port", String(port), "--model-dir", diffusionDir(), "--diffusion-fa"],
+    env: { SD_API_KEY: apiKey },
+  }), broadcast("diffusion"));
+const restart = () => (restartLlm(), restartSd());
+
+const imageModels = createImageModels(diffusionDir, broadcast("image-models"));
+
+// Generated images live as PNGs in the app data folder and are served to the UI as photon-image://local/<id>.png
+const imagesDir = () => path.join(app.getPath("userData"), "images");
+function imageFile(id) {
+  if (typeof id !== "string" || !/^[\w-]+$/.test(id)) throw new Error("Invalid image id");
+  return path.join(imagesDir(), `${id}.png`);
+}
+protocol.registerSchemesAsPrivileged([{ scheme: "photon-image", privileges: { standard: true, secure: true } }]);
 const openExternal = (url) => /^https?:/.test(url) && shell.openExternal(url);
 
 function dirSize(dir) {
@@ -37,12 +64,14 @@ function pruneModels(repo) {
   }
 }
 
-ipcMain.handle("engine:get", engineState);
+ipcMain.handle("engine:get", llm.state);
+ipcMain.handle("diffusion:get", sd.state);
 ipcMain.handle("models:prune", (_, repo) => {
   if (typeof repo !== "string" || !/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error("Invalid repo");
   pruneModels(repo);
 });
-ipcMain.handle("engine:restart", restart);
+ipcMain.handle("engine:restart", restartLlm);
+ipcMain.handle("diffusion:restart", restartSd);
 ipcMain.handle("info", async () => {
   const dir = modelsDir();
   fs.mkdirSync(dir, { recursive: true });
@@ -61,6 +90,17 @@ ipcMain.handle("models:choose-dir", async (e) => {
   return true;
 });
 ipcMain.handle("models:reveal", () => shell.openPath(modelsDir()));
+ipcMain.handle("image-models:list", imageModels.list);
+ipcMain.handle("image-models:download", (_, id) => imageModels.start(id));
+ipcMain.handle("image-models:pause", (_, id) => imageModels.pause(id));
+ipcMain.handle("image-models:delete", (_, id) => imageModels.remove(id));
+ipcMain.handle("images:save", (_, id, b64) => {
+  const file = imageFile(id);
+  fs.mkdirSync(imagesDir(), { recursive: true });
+  fs.writeFileSync(file, Buffer.from(b64, "base64"));
+});
+ipcMain.handle("images:delete", (_, id) => fs.rmSync(imageFile(id), { force: true }));
+ipcMain.handle("images:reveal", (_, id) => shell.showItemInFolder(imageFile(id)));
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -83,10 +123,11 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  protocol.handle("photon-image", (req) => net.fetch(pathToFileURL(imageFile(path.basename(new URL(req.url).pathname, ".png"))).href));
   pruneModels();
   restart();
   createWindow();
 });
 app.on("activate", () => BrowserWindow.getAllWindows().length === 0 && createWindow());
 app.on("window-all-closed", () => process.platform !== "darwin" && app.quit());
-app.on("will-quit", stopEngine);
+app.on("will-quit", () => (llm.stop(), sd.stop()));

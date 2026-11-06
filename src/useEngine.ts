@@ -8,15 +8,21 @@ export function useEngine() {
   const [models, setModels] = useState<LocalModel[]>([]);
   const [progress, setProgress] = useState<Record<string, Progress>>({});
   const [info, setInfo] = useState<SystemInfo | null>(null);
+  const [diffusion, setDiffusion] = useState(initial);
+  const [imageModels, setImageModels] = useState<ImageModel[]>([]);
 
   useEffect(() => {
     if (!window.photon) return;
     window.photon.engine().then(setEngine);
-    return window.photon.onEngine(setEngine);
+    window.photon.diffusion().then(setDiffusion);
+    window.photon.imageModels().then(setImageModels);
+    const offs = [window.photon.onEngine(setEngine), window.photon.onDiffusion(setDiffusion), window.photon.onImageModels(setImageModels)];
+    return () => offs.forEach((off) => off());
   }, []);
 
   const refresh = useCallback(() => {
     window.photon?.info().then(setInfo);
+    window.photon?.imageModels().then(setImageModels);
     if (engine.status === "ready") listModels(engine).then(setModels, () => {});
     else setModels([]);
   }, [engine]);
@@ -37,5 +43,5 @@ export function useEngine() {
     return () => ctrl.abort();
   }, [engine, refresh]);
 
-  return { engine, models, progress, info, refresh };
+  return { engine, models, progress, info, refresh, diffusion, imageModels };
 }

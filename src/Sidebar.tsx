@@ -1,27 +1,31 @@
-import type { Chat } from "./store";
+import type { Chat, View } from "./store";
 import { ConfirmButton } from "./ConfirmButton";
-import { ModelsIcon, NewChatIcon, SettingsIcon, SidebarIcon, TrashIcon } from "./icons";
+import { ImageIcon, ModelsIcon, NewChatIcon, SettingsIcon, SidebarIcon, TrashIcon } from "./icons";
 
 type Props = {
   chats: Chat[];
   activeId: string | null;
-  modelsOpen: boolean;
+  view: View;
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
   onModels: () => void;
+  onImages: () => void;
   onSettings: () => void;
   onCollapse: () => void;
 };
 
-export function Sidebar({ chats, activeId, modelsOpen, onSelect, onNew, onDelete, onModels, onSettings, onCollapse }: Props) {
+export function Sidebar({ chats, activeId, view, onSelect, onNew, onDelete, onModels, onImages, onSettings, onCollapse }: Props) {
   return (
     <aside className="sidebar">
       <div className="titlebar">
         <button className="icon-btn" onClick={onCollapse} title="Hide sidebar (⌘B)"><SidebarIcon /></button>
         <button className="icon-btn" onClick={onNew} title="New chat (⌘N)"><NewChatIcon /></button>
       </div>
-      <button className={`nav-item ${modelsOpen ? "active" : ""}`} onClick={onModels}>
+      <button className={`nav-item ${view === "images" ? "active" : ""}`} onClick={onImages}>
+        <ImageIcon /> Images
+      </button>
+      <button className={`nav-item ${view === "models" ? "active" : ""}`} onClick={onModels}>
         <ModelsIcon /> Models
       </button>
       <nav className="chat-list">
@@ -31,7 +35,7 @@ export function Sidebar({ chats, activeId, modelsOpen, onSelect, onNew, onDelete
             key={c.id}
             role="button"
             tabIndex={0}
-            className={`chat-item ${!modelsOpen && c.id === activeId ? "active" : ""}`}
+            className={`chat-item ${view === "chat" && c.id === activeId ? "active" : ""}`}
             onClick={() => onSelect(c.id)}
             onKeyDown={(e) => e.key === "Enter" && onSelect(c.id)}
           >

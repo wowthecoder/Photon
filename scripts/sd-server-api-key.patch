@@ -1,0 +1,29 @@
+diff --git a/examples/server/main.cpp b/examples/server/main.cpp
+index a10cb66..b9b29c2 100644
+--- a/examples/server/main.cpp
++++ b/examples/server/main.cpp
+@@ -138,7 +138,11 @@ int main(int argc, const char** argv) {
+ 
+     httplib::Server svr;
+ 
+-    svr.set_pre_routing_handler([](const httplib::Request& req, httplib::Response& res) {
++    // Photon patch: require "Authorization: Bearer $SD_API_KEY" when the env var is set
++    const char* api_key_env = std::getenv("SD_API_KEY");
++    const std::string api_key = api_key_env ? api_key_env : "";
++
++    svr.set_pre_routing_handler([api_key](const httplib::Request& req, httplib::Response& res) {
+         std::string origin = req.get_header_value("Origin");
+         if (origin.empty()) {
+             origin = "*";
+@@ -152,6 +156,11 @@ int main(int argc, const char** argv) {
+             res.status = 204;
+             return httplib::Server::HandlerResponse::Handled;
+         }
++        if (!api_key.empty() && req.get_header_value("Authorization") != "Bearer " + api_key) {
++            res.status = 401;
++            res.set_content("{\"error\":\"Invalid API key\",\"code\":\"unauthorized\"}", "application/json");
++            return httplib::Server::HandlerResponse::Handled;
++        }
+         return httplib::Server::HandlerResponse::Unhandled;
+     });
+ 

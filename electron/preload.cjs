@@ -8,6 +8,25 @@ contextBridge.exposeInMainWorld("photon", {
     ipcRenderer.on("engine", listener);
     return () => ipcRenderer.off("engine", listener);
   },
+  diffusion: () => ipcRenderer.invoke("diffusion:get"),
+  restartDiffusion: () => ipcRenderer.invoke("diffusion:restart"),
+  onDiffusion: (cb) => {
+    const listener = (_, state) => cb(state);
+    ipcRenderer.on("diffusion", listener);
+    return () => ipcRenderer.off("diffusion", listener);
+  },
+  imageModels: () => ipcRenderer.invoke("image-models:list"),
+  onImageModels: (cb) => {
+    const listener = (_, list) => cb(list);
+    ipcRenderer.on("image-models", listener);
+    return () => ipcRenderer.off("image-models", listener);
+  },
+  downloadImageModel: (id) => ipcRenderer.invoke("image-models:download", id),
+  pauseImageModel: (id) => ipcRenderer.invoke("image-models:pause", id),
+  deleteImageModel: (id) => ipcRenderer.invoke("image-models:delete", id),
+  saveImage: (id, b64) => ipcRenderer.invoke("images:save", id, b64),
+  deleteImage: (id) => ipcRenderer.invoke("images:delete", id),
+  revealImage: (id) => ipcRenderer.invoke("images:reveal", id),
   info: () => ipcRenderer.invoke("info"),
   chooseModelsDir: () => ipcRenderer.invoke("models:choose-dir"),
   revealModelsDir: () => ipcRenderer.invoke("models:reveal"),

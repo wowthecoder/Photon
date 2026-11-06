@@ -16,17 +16,20 @@ export function modelLabel(id: string) {
   return tag ? `${name} · ${tag}` : name;
 }
 
-async function api(engine: EngineState, path: string, init: RequestInit = {}) {
+export async function api(engine: EngineState, path: string, init: RequestInit = {}) {
   if (engine.status !== "ready") throw new Error("The model engine is not running.");
   const res = await fetch(engine.url + path, {
     ...init,
     headers: { Authorization: `Bearer ${engine.apiKey}`, "Content-Type": "application/json" },
   });
-  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error?.message ?? `HTTP ${res.status}`);
+  if (!res.ok) {
+    const error = (await res.json().catch(() => null))?.error;
+    throw new Error(error?.message ?? (typeof error === "string" ? error : `HTTP ${res.status}`));
+  }
   return res;
 }
 
-const post = (engine: EngineState, path: string, body: object, signal?: AbortSignal) =>
+export const post = (engine: EngineState, path: string, body: object, signal?: AbortSignal) =>
   api(engine, path, { method: "POST", body: JSON.stringify(body), signal });
 
 async function* sse(res: Response) {
@@ -43,7 +46,9 @@ async function* sse(res: Response) {
 
 export const listModels = async (engine: EngineState): Promise<LocalModel[]> => (await (await api(engine, "/models")).json()).data;
 export const downloadModel = (engine: EngineState, model: string) => post(engine, "/models", { model });
-export const pauseDownload = (engine: EngineState, model: string) => post(engine, "/models/unload", { model });
+// the router uses one endpoint both to stop a download and to free a loaded model
+export const unloadModel = (engine: EngineState, model: string) => post(engine, "/models/unload", { model });
+export const pauseDownload = unloadModel;
 export const deleteModel = (engine: EngineState, model: string) =>
   api(engine, `/models?model=${encodeURIComponent(model)}`, { method: "DELETE" });
 

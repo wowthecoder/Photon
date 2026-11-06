@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 export type Message = { id: string; role: "user" | "assistant"; content: string; reasoning?: string };
 export type Chat = { id: string; title: string; model: string; messages: Message[] };
+export type View = "chat" | "models" | "images";
 export type Theme = "system" | "light" | "dark";
 export type Settings = { model: string; systemPrompt: string; temperature: number; theme: Theme };
 

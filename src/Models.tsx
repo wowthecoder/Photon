@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { ConfirmButton } from "./ConfirmButton";
 import { FAMILIES, defaultQuant, estimateQ4, familyVariants, topVariants, fits, formatBytes, formatCount, formatParams, listQuants, searchVariants, type Family, type Quant, type Source, type Variant } from "./catalog";
 import { deleteModel, downloadModel, modelLabel, pauseDownload, sumProgress, type LocalModel, type Progress } from "./llm";
+import { isDownloaded, isDownloading, isStarted, modelDone, modelError, modelSize } from "./diffusion";
 import { SidebarIcon, TrashIcon } from "./icons";
 
 type Props = {
   engine: EngineState;
   models: LocalModel[];
+  imageModels: ImageModel[];
   progress: Record<string, Progress>;
   info: SystemInfo | null;
   sidebarOpen: boolean;
@@ -51,7 +53,8 @@ export function Models(props: Props) {
 
 type TabProps = Props & { run: (p: Promise<unknown>) => void };
 
-function Downloaded({ engine, models, progress, info, run, onDiscover }: TabProps & { onDiscover: () => void }) {
+function Downloaded({ engine, models, imageModels, progress, info, run, onDiscover }: TabProps & { onDiscover: () => void }) {
+  const images = imageModels.filter(isStarted);
   return (
     <>
       {info && (
@@ -60,7 +63,7 @@ function Downloaded({ engine, models, progress, info, run, onDiscover }: TabProp
           <button className="link-btn" onClick={() => window.photon?.revealModelsDir()}>{info.modelsDir}</button>
         </p>
       )}
-      {models.length === 0 && (
+      {models.length === 0 && images.length === 0 && (
         <div className="empty-card">
           <p>No models downloaded yet.</p>
           <button className="primary-btn" onClick={onDiscover}>Browse models</button>
@@ -87,7 +90,55 @@ function Downloaded({ engine, models, progress, info, run, onDiscover }: TabProp
           </div>
         );
       })}
+      {images.map((m) => <ImageModelRow key={m.id} model={m} info={info} run={run} />)}
     </>
+  );
+}
+
+function ImageModelRow({ model, info, run, discover }: { model: ImageModel; info: SystemInfo | null; run: TabProps["run"]; discover?: boolean }) {
+  const size = modelSize(model);
+  const done = modelDone(model);
+  const downloaded = isDownloaded(model);
+  const downloading = isDownloading(model);
+  const error = modelError(model);
+  const tooBig = info && !fits(size, info.totalMem);
+  const noSpace = info && size - done > info.freeBytes;
+  const photon = window.photon;
+
+  return (
+    <div className="row">
+      <div className="row-main">
+        <div className="row-title">
+          {model.name} <span className="badge">Image</span>
+        </div>
+        <div className={`small ${error ? "warn-text" : "muted"}`}>{error ?? `${model.maker} · ${model.description} · ${model.license}`}</div>
+        {downloading && <ProgressBar done={done} total={size} />}
+      </div>
+      <span className="muted small" title="Model, text encoder and VAE">{formatBytes(size)}</span>
+      {discover && info && !downloaded && <span className={`badge ${tooBig ? "warn" : "ok"}`}>{tooBig ? "Too large" : "Fits"}</span>}
+      {downloaded ? (
+        <span className="muted small status">{discover ? "Downloaded" : "Ready"}</span>
+      ) : downloading ? (
+        <>
+          <span className="muted small">{percent({ done, total: size })}</span>
+          <button className="secondary-btn" onClick={() => run(photon!.pauseImageModel(model.id))}>Pause</button>
+        </>
+      ) : (
+        <button
+          className="secondary-btn"
+          disabled={!photon || !!noSpace}
+          title={noSpace ? "Not enough disk space" : undefined}
+          onClick={() => run(photon!.downloadImageModel(model.id))}
+        >
+          {isStarted(model) ? "Resume" : "Download"}
+        </button>
+      )}
+      {!discover && !downloading && (
+        <ConfirmButton title="Delete model" onConfirm={() => run(photon!.deleteImageModel(model.id))}>
+          <TrashIcon />
+        </ConfirmButton>
+      )}
+    </div>
   );
 }
 
@@ -121,6 +172,8 @@ function Discover(props: TabProps) {
               </button>
             ))}
           </div>
+          <h3 className="section-title">Image Generation</h3>
+          {props.imageModels.map((m) => <ImageModelRow key={m.id} model={m} info={props.info} run={props.run} discover />)}
           <VariantList title="Top Downloaded from HuggingFace" load={topVariants} {...props} />
         </>
       )}
