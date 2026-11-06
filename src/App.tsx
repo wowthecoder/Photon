@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Chat } from "./Chat";
 import { unloadImageModel, type GeneratedImage } from "./diffusion";
 import { Images } from "./Images";
-import { Models } from "./Models";
+import { Models, type ModelKind, type ModelTab } from "./Models";
 import { Settings } from "./Settings";
 import { Sidebar } from "./Sidebar";
 import { isReady, streamChat } from "./llm";
@@ -17,6 +17,8 @@ export function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [gallery, setGallery] = usePersistent<GeneratedImage[]>("images", []);
   const [view, setView] = useState<View>("chat");
+  // each model kind remembers its own Downloaded/Discover tab
+  const [modelsNav, setModelsNav] = useState<{ kind: ModelKind; tabs: Record<ModelKind, ModelTab> }>({ kind: "text", tabs: { text: "downloaded", image: "downloaded" } });
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [streaming, setStreaming] = useState(false);
@@ -30,6 +32,8 @@ export function App() {
 
   const update = (id: string, fn: (c: ChatT) => ChatT) => setChats((cs) => cs.map((c) => (c.id === id ? fn(c) : c)));
   const openChat = (id: string | null) => (setActiveId(id), setView("chat"));
+  const navigateModels = (kind: ModelKind, tab?: ModelTab) => setModelsNav((n) => ({ kind, tabs: tab ? { ...n.tabs, [kind]: tab } : n.tabs }));
+  const openModels = (kind?: ModelKind, tab?: ModelTab) => (kind && navigateModels(kind, tab), setView("models"));
 
   useEffect(() => {
     if (settings.theme === "system") delete document.documentElement.dataset.theme;
@@ -89,7 +93,7 @@ export function App() {
           onSelect={openChat}
           onNew={() => openChat(null)}
           onDelete={remove}
-          onModels={() => setView("models")}
+          onModels={() => openModels()}
           onImages={() => setView("images")}
           onSettings={() => setSettingsOpen(true)}
           onCollapse={() => setSidebarOpen(false)}
@@ -105,10 +109,22 @@ export function App() {
         setGallery={setGallery}
         sidebarOpen={sidebarOpen}
         onExpand={() => setSidebarOpen(true)}
-        onOpenModels={() => setView("models")}
+        onOpenModels={() => openModels("image", "discover")}
       />
       {view === "images" ? null : view === "models" ? (
-        <Models engine={engine} models={models} imageModels={imageModels} progress={progress} info={info} sidebarOpen={sidebarOpen} onExpand={() => setSidebarOpen(true)} refresh={refresh} />
+        <Models
+          engine={engine}
+          models={models}
+          imageModels={imageModels}
+          progress={progress}
+          info={info}
+          kind={modelsNav.kind}
+          tab={modelsNav.tabs[modelsNav.kind]}
+          onNavigate={navigateModels}
+          sidebarOpen={sidebarOpen}
+          onExpand={() => setSidebarOpen(true)}
+          refresh={refresh}
+        />
       ) : (
         <Chat
           chat={active}
@@ -122,7 +138,7 @@ export function App() {
           onStop={() => abortRef.current?.abort()}
           onNew={() => openChat(null)}
           onExpand={() => setSidebarOpen(true)}
-          onOpenModels={() => setView("models")}
+          onOpenModels={() => openModels("text", "discover")}
         />
       )}
       <Settings open={settingsOpen} settings={settings} models={ready} info={info} onChange={setSettings} onClose={() => setSettingsOpen(false)} />

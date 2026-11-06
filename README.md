@@ -50,15 +50,15 @@ The `.dmg` isn't code-signed. The first time you open it, macOS will block it: r
 
 ## Using it
 
-1. Open **Models** in the sidebar, then **Discover**.
+1. Open **Models** in the sidebar, then **Text → Discover**.
 2. Pick a model family (Qwen, Gemma, GPT-OSS, …) or search. Each row is one model, with its size, context length, estimated download size and total downloads.
 3. Click a model to see where you can download it from: the official publisher and the trusted quantizers (ggml-org, unsloth, bartowski, lmstudio-community). Each source has a quantization picker with exact file sizes, defaulting to a 4-bit file.
-4. Click **Download**. Progress appears there and in the **Downloaded** tab, where you can pause, resume or delete.
+4. Click **Download**. Progress appears there and in **Text → Downloaded**, where you can pause, resume or delete.
 5. Start a new chat (⌘N) and pick the model in the header. It loads into memory on the first message.
 
 To generate images:
 
-1. Open **Models → Discover** and download a model under **Image Generation**. Each one is a diffusion model, a text encoder and a VAE; files shared between models are downloaded once.
+1. Open **Models → Image → Discover** and download a model. Each one is a diffusion model, a text encoder and a VAE; files shared between models are downloaded once.
 2. Open **Images** in the sidebar, describe the image, pick a size and click **Generate**. A preview updates on every step. On an M5 Pro, Z-Image Turbo takes about 75 s at 1024×1024 and FLUX.2 klein 4B about 15 s at 768×768.
 3. Click an image to see its prompt and seed, reuse them, show it in Finder or delete it.
 
@@ -119,7 +119,7 @@ src/llm.ts            llama-server client: models, downloads, streaming chat
 src/diffusion.ts      sd-server client: load an image model, run and poll a generation
 src/Images.tsx        Images screen: prompt, live preview, gallery, image viewer
 src/catalog.ts        Model families, Hugging Face search grouped by base model, quantization sizes
-src/Models.tsx        Models screen: Downloaded and Discover tabs
+src/Models.tsx        Models screen: Text and Image sections, each with Downloaded and Discover tabs
 src/Chat.tsx          Model picker, messages (markdown, thinking), composer
 src/Sidebar.tsx       Models link, chat list, settings
 src/Settings.tsx      Default model, models folder, system prompt, temperature, theme

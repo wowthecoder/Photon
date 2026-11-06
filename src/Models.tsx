@@ -5,12 +5,18 @@ import { deleteModel, downloadModel, modelLabel, pauseDownload, sumProgress, typ
 import { isDownloaded, isDownloading, isStarted, modelDone, modelError, modelSize } from "./diffusion";
 import { SidebarIcon, TrashIcon } from "./icons";
 
+export type ModelKind = "text" | "image";
+export type ModelTab = "downloaded" | "discover";
+
 type Props = {
   engine: EngineState;
   models: LocalModel[];
   imageModels: ImageModel[];
   progress: Record<string, Progress>;
   info: SystemInfo | null;
+  kind: ModelKind;
+  tab: ModelTab;
+  onNavigate: (kind: ModelKind, tab?: ModelTab) => void;
   sidebarOpen: boolean;
   onExpand: () => void;
   refresh: () => void;
@@ -25,48 +31,63 @@ const STATUS: Record<string, string> = {
 };
 
 export function Models(props: Props) {
-  const [tab, setTab] = useState<"downloaded" | "discover">("downloaded");
+  const { kind, tab, onNavigate } = props;
   const [error, setError] = useState("");
   const run = (p: Promise<unknown>) => p.then(props.refresh, (e) => setError(e.message));
+  const tabProps = { ...props, run, onDiscover: () => onNavigate(kind, "discover") };
 
   return (
     <main className="chat">
       <header className={`titlebar ${props.sidebarOpen ? "" : "inset"}`}>
         {!props.sidebarOpen && <button className="icon-btn" onClick={props.onExpand} title="Show sidebar (⌘B)"><SidebarIcon /></button>}
-        <div className="tabs" role="tablist">
-          <button role="tab" aria-selected={tab === "downloaded"} onClick={() => setTab("downloaded")}>Downloaded</button>
-          <button role="tab" aria-selected={tab === "discover"} onClick={() => setTab("discover")}>Discover</button>
+        <div className="tabs" role="tablist" aria-label="Model type">
+          <button role="tab" aria-selected={kind === "text"} onClick={() => onNavigate("text")}>Text</button>
+          <button role="tab" aria-selected={kind === "image"} onClick={() => onNavigate("image")}>Image</button>
         </div>
       </header>
       <div className="page">
-        {props.engine.status === "error" && (
+        {kind === "text" && props.engine.status === "error" && (
           <div className="banner">
             {props.engine.error} <button className="link-btn" onClick={() => window.photon?.restartEngine()}>Restart engine</button>
           </div>
         )}
         {error && <div className="banner" onClick={() => setError("")}>{error}</div>}
-        {tab === "downloaded" ? <Downloaded {...props} run={run} onDiscover={() => setTab("discover")} /> : <Discover {...props} run={run} />}
+        <div className="tabs subtabs" role="tablist" aria-label={`${kind === "text" ? "Text" : "Image"} models`}>
+          <button role="tab" aria-selected={tab === "downloaded"} onClick={() => onNavigate(kind, "downloaded")}>Downloaded</button>
+          <button role="tab" aria-selected={tab === "discover"} onClick={() => onNavigate(kind, "discover")}>Discover</button>
+        </div>
+        {kind === "text" ? (
+          tab === "downloaded" ? <Downloaded {...tabProps} /> : <Discover key="text" {...tabProps} />
+        ) : tab === "downloaded" ? (
+          <ImageDownloaded {...tabProps} />
+        ) : (
+          <ImageDiscover {...tabProps} />
+        )}
       </div>
     </main>
   );
 }
 
-type TabProps = Props & { run: (p: Promise<unknown>) => void };
+type TabProps = Props & { run: (p: Promise<unknown>) => void; onDiscover: () => void };
 
-function Downloaded({ engine, models, imageModels, progress, info, run, onDiscover }: TabProps & { onDiscover: () => void }) {
-  const images = imageModels.filter(isStarted);
+function DiskInfo({ info }: { info: SystemInfo | null }) {
+  if (!info) return null;
+  return (
+    <p className="muted">
+      {formatBytes(info.usedBytes)} used · {formatBytes(info.freeBytes)} free in{" "}
+      <button className="link-btn" onClick={() => window.photon?.revealModelsDir()}>{info.modelsDir}</button>
+    </p>
+  );
+}
+
+function Downloaded({ engine, models, progress, info, run, onDiscover }: TabProps) {
   return (
     <>
-      {info && (
-        <p className="muted">
-          {formatBytes(info.usedBytes)} used · {formatBytes(info.freeBytes)} free in{" "}
-          <button className="link-btn" onClick={() => window.photon?.revealModelsDir()}>{info.modelsDir}</button>
-        </p>
-      )}
-      {models.length === 0 && images.length === 0 && (
+      <DiskInfo info={info} />
+      {models.length === 0 && (
         <div className="empty-card">
-          <p>No models downloaded yet.</p>
-          <button className="primary-btn" onClick={onDiscover}>Browse models</button>
+          <p>No text models downloaded yet.</p>
+          <button className="primary-btn" onClick={onDiscover}>Browse text models</button>
         </div>
       )}
       {models.map((m) => {
@@ -90,7 +111,40 @@ function Downloaded({ engine, models, imageModels, progress, info, run, onDiscov
           </div>
         );
       })}
-      {images.map((m) => <ImageModelRow key={m.id} model={m} info={info} run={run} />)}
+    </>
+  );
+}
+
+function ImageDownloaded({ imageModels, info, run, onDiscover }: TabProps) {
+  const started = imageModels.filter(isStarted);
+  return (
+    <>
+      <DiskInfo info={info} />
+      {started.length === 0 && (
+        <div className="empty-card">
+          <p>No image models downloaded yet.</p>
+          <button className="primary-btn" onClick={onDiscover}>Browse image models</button>
+        </div>
+      )}
+      {started.map((m) => <ImageModelRow key={m.id} model={m} info={info} run={run} />)}
+    </>
+  );
+}
+
+// ponytail: searches the curated list in electron/imageModels.json; open Hugging Face search needs a file mapping per model, add it with more recipes
+function ImageDiscover({ imageModels, info, run }: TabProps) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const shown = imageModels.filter((m) => !q || `${m.name} ${m.maker} ${m.description}`.toLowerCase().includes(q));
+
+  return (
+    <>
+      <form className="search" onSubmit={(e) => e.preventDefault()}>
+        <input type="search" placeholder="Search image models, e.g. flux" value={query} onChange={(e) => setQuery(e.target.value)} />
+      </form>
+      <h3 className="section-title">{q ? `Results for “${query.trim()}”` : "Image Generation Models"}</h3>
+      {shown.length === 0 && <p className="muted">No image models match.</p>}
+      {shown.map((m) => <ImageModelRow key={m.id} model={m} info={info} run={run} discover />)}
     </>
   );
 }
@@ -108,9 +162,7 @@ function ImageModelRow({ model, info, run, discover }: { model: ImageModel; info
   return (
     <div className="row">
       <div className="row-main">
-        <div className="row-title">
-          {model.name} <span className="badge">Image</span>
-        </div>
+        <div className="row-title">{model.name}</div>
         <div className={`small ${error ? "warn-text" : "muted"}`}>{error ?? `${model.maker} · ${model.description} · ${model.license}`}</div>
         {downloading && <ProgressBar done={done} total={size} />}
       </div>
@@ -152,7 +204,7 @@ function Discover(props: TabProps) {
       <form className="search" onSubmit={(e) => (e.preventDefault(), setQuery(draft.trim()))}>
         <input
           type="search"
-          placeholder="Search models, e.g. qwen3 8b"
+          placeholder="Search text models, e.g. qwen3 8b"
           value={draft}
           onChange={(e) => (setDraft(e.target.value), !e.target.value.trim() && setQuery(""))}
         />
@@ -172,8 +224,6 @@ function Discover(props: TabProps) {
               </button>
             ))}
           </div>
-          <h3 className="section-title">Image Generation</h3>
-          {props.imageModels.map((m) => <ImageModelRow key={m.id} model={m} info={props.info} run={props.run} discover />)}
           <VariantList title="Top Downloaded from HuggingFace" load={topVariants} {...props} />
         </>
       )}
