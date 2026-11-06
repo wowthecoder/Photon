@@ -8,7 +8,8 @@
     "web": "vite",
     "build": "tsc && vite build",
     "start": "npm run build && electron .",
-    "dist": "npm run build && electron-builder --mac"
+    "dist": "node scripts/fetch-llama.js && npm run build && electron-builder --mac",
+    "test": "node src/catalog.test.ts"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
@@ -35,9 +36,21 @@
       "output": "release"
     },
     "mac": {
-      "target": "dmg",
+      "target": {
+        "target": "dmg",
+        "arch": [
+          "arm64"
+        ]
+      },
       "icon": "resources/icon.icns",
       "category": "public.app-category.productivity"
-    }
-  }
+    },
+    "extraResources": [
+      {
+        "from": "resources/llama",
+        "to": "llama"
+      }
+    ]
+  },
+  "productName": "Photon"
 }

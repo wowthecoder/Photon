@@ -10,3 +10,4 @@ export const SettingsIcon = icon("M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M
 export const TrashIcon = icon("M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3");
 export const SendIcon = icon("M12 19V5M5 12l7-7 7 7");
 export const StopIcon = icon("M7 7h10v10H7z");
+export const ModelsIcon = icon("M12 3 4 7.5v9L12 21l8-4.5v-9ZM4 7.5l8 4.5 8-4.5M12 12v9");

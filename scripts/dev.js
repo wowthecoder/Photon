@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import electron from "electron";
 import { createServer } from "vite";
+import "./fetch-llama.js";
 
 const server = await createServer();
 await server.listen();

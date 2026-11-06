@@ -1,23 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 import { Chat } from "./Chat";
+import { Models } from "./Models";
 import { Settings } from "./Settings";
 import { Sidebar } from "./Sidebar";
-import { MODELS, streamChat } from "./llm";
+import { isReady, streamChat } from "./llm";
 import { usePersistent, type Chat as ChatT, type Message, type Settings as SettingsT } from "./store";
+import { useEngine } from "./useEngine";
 
-const DEFAULT_SETTINGS: SettingsT = { model: MODELS[0], systemPrompt: "", temperature: 0.7, theme: "system" };
+const DEFAULT_SETTINGS: SettingsT = { model: "", systemPrompt: "", temperature: 0.7, theme: "system" };
 
 export function App() {
   const [chats, setChats] = usePersistent<ChatT[]>("chats", []);
   const [settings, setSettings] = usePersistent("settings", DEFAULT_SETTINGS);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [view, setView] = useState<"chat" | "models">("chat");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const { engine, models, progress, info, refresh } = useEngine();
+  const ready = models.filter(isReady);
   const active = chats.find((c) => c.id === activeId);
+  const defaultModel = ready.some((m) => m.id === settings.model) ? settings.model : (ready[0]?.id ?? "");
 
   const update = (id: string, fn: (c: ChatT) => ChatT) => setChats((cs) => cs.map((c) => (c.id === id ? fn(c) : c)));
+  const openChat = (id: string | null) => (setActiveId(id), setView("chat"));
 
   useEffect(() => {
     if (settings.theme === "system") delete document.documentElement.dataset.theme;
@@ -27,7 +34,7 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
-      const action = { n: () => setActiveId(null), b: () => setSidebarOpen((o) => !o), ",": () => setSettingsOpen(true) }[e.key];
+      const action = { n: () => openChat(null), b: () => setSidebarOpen((o) => !o), ",": () => setSettingsOpen(true) }[e.key];
       if (action) (e.preventDefault(), action());
     };
     window.addEventListener("keydown", onKey);
@@ -35,22 +42,25 @@ export function App() {
   }, []);
 
   async function send(text: string) {
-    const chat = active ?? { id: crypto.randomUUID(), title: text.slice(0, 48), model: settings.model, messages: [] };
+    const chat = active ?? { id: crypto.randomUUID(), title: text.slice(0, 48), model: defaultModel, messages: [] };
     const history: Message[] = [...chat.messages, { id: crypto.randomUUID(), role: "user", content: text }];
     const replyId = crypto.randomUUID();
     setChats((cs) => [{ ...chat, messages: [...history, { id: replyId, role: "assistant", content: "" }] }, ...cs.filter((c) => c.id !== chat.id)]);
     setActiveId(chat.id);
 
-    const appendReply = (token: string) =>
-      update(chat.id, (c) => ({ ...c, messages: c.messages.map((m) => (m.id === replyId ? { ...m, content: m.content + token } : m)) }));
+    const append = (content: string, reasoning = "") =>
+      update(chat.id, (c) => ({
+        ...c,
+        messages: c.messages.map((m) => (m.id === replyId ? { ...m, content: m.content + content, reasoning: (m.reasoning ?? "") + reasoning || undefined } : m)),
+      }));
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setStreaming(true);
     try {
-      for await (const token of streamChat(history, chat.model, settings, ctrl.signal)) appendReply(token);
+      for await (const t of streamChat(engine, history, chat.model, settings, ctrl.signal)) append(t.content, t.reasoning);
     } catch (e) {
-      appendReply(`\n\n**Error:** ${e instanceof Error ? e.message : String(e)}`);
+      if (!ctrl.signal.aborted) append(`\n\n**Error:** ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setStreaming(false);
       abortRef.current = null;
@@ -68,25 +78,34 @@ export function App() {
         <Sidebar
           chats={chats}
           activeId={activeId}
-          onSelect={setActiveId}
-          onNew={() => setActiveId(null)}
+          modelsOpen={view === "models"}
+          onSelect={openChat}
+          onNew={() => openChat(null)}
           onDelete={remove}
+          onModels={() => setView("models")}
           onSettings={() => setSettingsOpen(true)}
           onCollapse={() => setSidebarOpen(false)}
         />
       )}
-      <Chat
-        chat={active}
-        model={active?.model ?? settings.model}
-        streaming={streaming}
-        sidebarOpen={sidebarOpen}
-        onModelChange={(model) => (active ? update(active.id, (c) => ({ ...c, model })) : setSettings({ ...settings, model }))}
-        onSend={send}
-        onStop={() => abortRef.current?.abort()}
-        onNew={() => setActiveId(null)}
-        onExpand={() => setSidebarOpen(true)}
-      />
-      <Settings open={settingsOpen} settings={settings} onChange={setSettings} onClose={() => setSettingsOpen(false)} />
+      {view === "models" ? (
+        <Models engine={engine} models={models} progress={progress} info={info} sidebarOpen={sidebarOpen} onExpand={() => setSidebarOpen(true)} refresh={refresh} />
+      ) : (
+        <Chat
+          chat={active}
+          model={active?.model ?? defaultModel}
+          models={ready}
+          engine={engine}
+          streaming={streaming}
+          sidebarOpen={sidebarOpen}
+          onModelChange={(model) => (active ? update(active.id, (c) => ({ ...c, model })) : setSettings({ ...settings, model }))}
+          onSend={send}
+          onStop={() => abortRef.current?.abort()}
+          onNew={() => openChat(null)}
+          onExpand={() => setSidebarOpen(true)}
+          onOpenModels={() => setView("models")}
+        />
+      )}
+      <Settings open={settingsOpen} settings={settings} models={ready} info={info} onChange={setSettings} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }
