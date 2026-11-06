@@ -22,6 +22,8 @@ export function App() {
   const ready = models.filter(isReady);
   const active = chats.find((c) => c.id === activeId);
   const defaultModel = ready.some((m) => m.id === settings.model) ? settings.model : (ready[0]?.id ?? "");
+  // a chat's saved model may have been deleted since; fall back to the default instead of offering a model that isn't there
+  const model = ready.some((m) => m.id === active?.model) ? active!.model : defaultModel;
 
   const update = (id: string, fn: (c: ChatT) => ChatT) => setChats((cs) => cs.map((c) => (c.id === id ? fn(c) : c)));
   const openChat = (id: string | null) => (setActiveId(id), setView("chat"));
@@ -42,7 +44,7 @@ export function App() {
   }, []);
 
   async function send(text: string) {
-    const chat = active ?? { id: crypto.randomUUID(), title: text.slice(0, 48), model: defaultModel, messages: [] };
+    const chat = { ...(active ?? { id: crypto.randomUUID(), title: text.slice(0, 48), messages: [] }), model };
     const history: Message[] = [...chat.messages, { id: crypto.randomUUID(), role: "user", content: text }];
     const replyId = crypto.randomUUID();
     setChats((cs) => [{ ...chat, messages: [...history, { id: replyId, role: "assistant", content: "" }] }, ...cs.filter((c) => c.id !== chat.id)]);
@@ -92,7 +94,7 @@ export function App() {
       ) : (
         <Chat
           chat={active}
-          model={active?.model ?? defaultModel}
+          model={model}
           models={ready}
           engine={engine}
           streaming={streaming}

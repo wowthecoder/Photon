@@ -56,14 +56,7 @@ export function Chat({ chat, model, models, engine, streaming, sidebarOpen, onMo
             <button className="icon-btn" onClick={onNew} title="New chat (⌘N)"><NewChatIcon /></button>
           </>
         )}
-        {models.length > 0 ? (
-          <select className="model-select" value={model} onChange={(e) => onModelChange(e.target.value)} aria-label="Model">
-            {!selected && <option value={model} disabled>{model ? `${modelLabel(model)} (not downloaded)` : "Choose a model"}</option>}
-            {models.map((m) => <option key={m.id} value={m.id}>{modelLabel(m.id)}</option>)}
-          </select>
-        ) : (
-          <button className="model-select" onClick={onOpenModels}>Download a model</button>
-        )}
+        <div className="chat-heading">{chat?.title}</div>
         {selected?.status.value === "loading" && <span className="muted small">Loading model…</span>}
       </header>
 
@@ -111,6 +104,13 @@ export function Chat({ chat, model, models, engine, streaming, sidebarOpen, onMo
             }
           }}
         />
+        {models.length > 0 ? (
+          <select className="model-select" value={model} disabled={streaming} onChange={(e) => onModelChange(e.target.value)} aria-label="Model">
+            {models.map((m) => <option key={m.id} value={m.id}>{modelLabel(m.id)}</option>)}
+          </select>
+        ) : (
+          <button type="button" className="model-select" onClick={onOpenModels}>Download a model</button>
+        )}
         {streaming ? (
           <button type="button" className="send-btn" onClick={onStop} title="Stop"><StopIcon /></button>
         ) : (
