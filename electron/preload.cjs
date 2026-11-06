@@ -11,4 +11,5 @@ contextBridge.exposeInMainWorld("photon", {
   info: () => ipcRenderer.invoke("info"),
   chooseModelsDir: () => ipcRenderer.invoke("models:choose-dir"),
   revealModelsDir: () => ipcRenderer.invoke("models:reveal"),
+  pruneModels: (repo) => ipcRenderer.invoke("models:prune", repo),
 });

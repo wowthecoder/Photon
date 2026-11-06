@@ -26,7 +26,22 @@ function dirSize(dir) {
   return total;
 }
 
+function pruneModels(repo) {
+  const dir = modelsDir();
+  const names = repo ? [`models--${repo.replace("/", "--")}`] : fs.existsSync(dir) ? fs.readdirSync(dir) : [];
+  for (const name of names.filter((n) => n.startsWith("models--"))) {
+    const blobs = path.join(dir, name, "blobs");
+    if (fs.existsSync(blobs) && fs.readdirSync(blobs).length) continue;
+    fs.rmSync(path.join(dir, name), { recursive: true, force: true });
+    fs.rmSync(path.join(dir, ".locks", name), { recursive: true, force: true });
+  }
+}
+
 ipcMain.handle("engine:get", engineState);
+ipcMain.handle("models:prune", (_, repo) => {
+  if (typeof repo !== "string" || !/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error("Invalid repo");
+  pruneModels(repo);
+});
 ipcMain.handle("engine:restart", restart);
 ipcMain.handle("info", async () => {
   const dir = modelsDir();
@@ -68,6 +83,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  pruneModels();
   restart();
   createWindow();
 });

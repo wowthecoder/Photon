@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ConfirmButton } from "./ConfirmButton";
-import { PUBLISHERS, fits, formatBytes, listQuants, searchRepos, type Quant, type Repo } from "./catalog";
+import { FAMILIES, defaultQuant, estimateQ4, familyVariants, topVariants, fits, formatBytes, formatCount, formatParams, listQuants, searchVariants, type Family, type Quant, type Source, type Variant } from "./catalog";
 import { deleteModel, downloadModel, modelLabel, pauseDownload, sumProgress, type LocalModel, type Progress } from "./llm";
 import { SidebarIcon, TrashIcon } from "./icons";
 
@@ -80,7 +80,7 @@ function Downloaded({ engine, models, progress, info, run, onDiscover }: TabProp
             {downloading && <button className="secondary-btn" onClick={() => run(pauseDownload(engine, m.id))}>Pause</button>}
             {m.status.value === "incomplete" && <button className="secondary-btn" onClick={() => run(downloadModel(engine, m.id))}>Resume</button>}
             {!downloading && (
-              <ConfirmButton title="Delete model" onConfirm={() => run(deleteModel(engine, m.id))}>
+              <ConfirmButton title="Delete model" onConfirm={() => run(deleteModel(engine, m.id).then(() => window.photon?.pruneModels(m.id.split(":")[0])))}>
                 <TrashIcon />
               </ConfirmButton>
             )}
@@ -91,98 +91,165 @@ function Downloaded({ engine, models, progress, info, run, onDiscover }: TabProp
   );
 }
 
-function Discover({ engine, models, progress, info, run }: TabProps) {
+function Discover(props: TabProps) {
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
-  const [author, setAuthor] = useState<string | undefined>(PUBLISHERS[0]);
-  const [repos, setRepos] = useState<Repo[] | null>(null);
-  const [error, setError] = useState("");
-  const [open, setOpen] = useState<string | null>(null);
-
-  useEffect(() => {
-    let live = true;
-    setRepos(null);
-    setError("");
-    searchRepos(query, author).then((r) => live && setRepos(r), (e) => live && setError(e.message));
-    return () => void (live = false);
-  }, [query, author]);
+  const [family, setFamily] = useState<Family | null>(null);
 
   return (
     <>
       <form className="search" onSubmit={(e) => (e.preventDefault(), setQuery(draft.trim()))}>
-        <input type="search" placeholder="Search GGUF models on Hugging Face" value={draft} onChange={(e) => setDraft(e.target.value)} />
+        <input
+          type="search"
+          placeholder="Search models, e.g. qwen3 8b"
+          value={draft}
+          onChange={(e) => (setDraft(e.target.value), !e.target.value.trim() && setQuery(""))}
+        />
       </form>
-      <div className="chips">
-        {[...PUBLISHERS, undefined].map((a) => (
-          <button key={a ?? "all"} className={`chip ${author === a ? "active" : ""}`} onClick={() => setAuthor(a)}>
-            {a ?? "Everyone"}
-          </button>
-        ))}
-      </div>
-      {author === undefined && <p className="muted small">Community uploads are unreviewed. Prefer the publishers above when you can.</p>}
-      {error && <p className="banner">{error}</p>}
-      {!repos && !error && <p className="muted">Loading…</p>}
-      {repos?.length === 0 && <p className="muted">No GGUF models found.</p>}
-      {repos?.map((r) => (
-        <div key={r.id} className="repo">
-          <button className="row row-btn" onClick={() => setOpen(open === r.id ? null : r.id)} aria-expanded={open === r.id}>
-            <div className="row-main">
-              <div className="row-title">{r.id.split("/")[1].replace(/-GGUF$/i, "")}</div>
-              <div className="muted small">{r.id.split("/")[0]} · {r.downloads.toLocaleString()} downloads</div>
-            </div>
-            {r.gated && <span className="badge">Gated</span>}
-            <span className="muted">{open === r.id ? "▾" : "▸"}</span>
-          </button>
-          {open === r.id && <Quants repo={r} engine={engine} models={models} progress={progress} info={info} run={run} />}
-        </div>
-      ))}
+      {query ? (
+        <VariantList key={`q:${query}`} title={`Results for “${query}”`} load={() => searchVariants(query)} onBack={() => (setDraft(""), setQuery(""))} {...props} />
+      ) : family ? (
+        <VariantList key={family.name} title={family.name} subtitle={family.maker} load={() => familyVariants(family)} onBack={() => setFamily(null)} {...props} />
+      ) : (
+        <>
+          <h3 className="section-title">Popular Model Families</h3>
+          <div className="family-grid">
+            {FAMILIES.map((f) => (
+              <button key={f.name} className="family-card" onClick={() => setFamily(f)}>
+                <span className="family-name">{f.name}</span>
+                <span className="muted small">{f.maker}</span>
+              </button>
+            ))}
+          </div>
+          <VariantList title="Top Downloaded from HuggingFace" load={topVariants} {...props} />
+        </>
+      )}
     </>
   );
 }
 
-type QuantsProps = Pick<TabProps, "engine" | "models" | "progress" | "info" | "run"> & { repo: Repo };
+const SOURCES_SHOWN = 6;
 
-function Quants({ repo, engine, models, progress, info, run }: QuantsProps) {
+type CatalogProps = Pick<TabProps, "engine" | "models" | "progress" | "info" | "run">;
+type ListProps = CatalogProps & { title: string; subtitle?: string; load: () => Promise<Variant[]>; onBack?: () => void };
+
+function VariantList({ title, subtitle, load, onBack, ...props }: ListProps) {
+  const [variants, setVariants] = useState<Variant[] | null>(null);
+  const [error, setError] = useState("");
+  const [open, setOpen] = useState<string | null>(null);
+  const [allSources, setAllSources] = useState(false);
+  const toggle = (id: string) => (setOpen(open === id ? null : id), setAllSources(false));
+
+  useEffect(() => {
+    let live = true;
+    load().then((v) => live && setVariants(v), (e) => live && setError(e.message));
+    return () => void (live = false);
+  }, []);
+
+  return (
+    <>
+      {onBack ? (
+        <div className="list-header">
+          <button className="link-btn" onClick={onBack}>← All models</button>
+          <h2>{title}</h2>
+          {subtitle && <span className="muted">{subtitle}</span>}
+        </div>
+      ) : (
+        <h3 className="section-title">{title}</h3>
+      )}
+      {error && <p className="banner">{error}</p>}
+      {!variants && !error && <p className="muted">Loading…</p>}
+      {variants?.length === 0 && <p className="muted">No GGUF models found.</p>}
+      {variants?.map((v) => {
+        const estimate = v.params ? estimateQ4(v.params) : 0;
+        const tooBig = estimate && props.info && !fits(estimate, props.info.totalMem);
+        const community = v.sources.every((s) => s.kind === "community");
+        const details = [v.org, v.params && `${formatParams(v.params)} params`, v.context && `${Math.round(v.context / 1024)}K context`, `${v.sources.length} source${v.sources.length > 1 ? "s" : ""}`];
+        return (
+          <div key={v.id} className="repo">
+            <button className="row row-btn" onClick={() => toggle(v.id)} aria-expanded={open === v.id}>
+              <div className="row-main">
+                <div className="row-title">{v.name}</div>
+                <div className="muted small">{details.filter(Boolean).join(" · ")}</div>
+              </div>
+              {estimate > 0 && <span className="muted small" title="Estimated size at Q4_K_M">≈{formatBytes(estimate)}</span>}
+              <span className="muted small">{formatCount(v.downloads)} downloads</span>
+              {community && <span className="badge warn" title="Not from the model's maker or a trusted quantizer">Community</span>}
+              {tooBig && <span className="badge warn">Too large</span>}
+              <span className="muted">{open === v.id ? "▾" : "▸"}</span>
+            </button>
+            {open === v.id && (allSources ? v.sources : v.sources.slice(0, SOURCES_SHOWN)).map((s) => <SourceRow key={s.repo} source={s} {...props} />)}
+            {open === v.id && !allSources && v.sources.length > SOURCES_SHOWN && (
+              <button className="link-btn more" onClick={() => setAllSources(true)}>
+                Show {v.sources.length - SOURCES_SHOWN} more sources
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function SourceRow({ source, engine, models, progress, info, run }: CatalogProps & { source: Source }) {
   const [quants, setQuants] = useState<Quant[] | null>(null);
+  const [tag, setTag] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
-    listQuants(repo.id).then(setQuants, (e) => setError(e.message));
-  }, [repo.id]);
+    listQuants(source.repo).then((q) => (setQuants(q), setTag(defaultQuant(q, info?.totalMem)?.tag ?? "")), (e) => setError(e.message));
+  }, [source.repo]);
 
-  if (error) return <p className="banner">{error}</p>;
-  if (!quants) return <p className="muted quant">Loading files…</p>;
-  if (quants.length === 0) return <p className="muted quant">No downloadable GGUF files.</p>;
+  const localModel = (t: string) => models.find((m) => m.id.toUpperCase() === `${source.repo}:${t}`.toUpperCase());
+  const quant = quants?.find((q) => q.tag === tag);
+  const id = `${source.repo}:${tag}`;
+  const local = localModel(tag);
+  const p = progress[id] ?? (local && sumProgress(local.status.progress));
+  const tooBig = quant && info && !fits(quant.size, info.totalMem);
+  const noSpace = quant && info && quant.size > info.freeBytes;
 
-  return quants.map((q) => {
-    const id = `${repo.id}:${q.tag}`;
-    const local = models.find((m) => m.id.toUpperCase() === id.toUpperCase());
-    const tooBig = info && !fits(q.size, info.totalMem);
-    const noSpace = info && q.size > info.freeBytes;
-    const p = progress[id] ?? (local && sumProgress(local.status.progress));
-    return (
-      <div key={q.tag} className="row quant">
-        <div className="row-main">
-          <div className="row-title">{q.tag}</div>
-          {local?.status.value === "downloading" && p && <ProgressBar {...p} />}
+  return (
+    <div className="row quant">
+      <div className="row-main">
+        <div className="row-title">
+          {source.author} {source.kind === "official" && <span className="badge">Official</span>}
+          {source.kind === "community" && <span className="badge warn" title="Unreviewed upload">Community</span>}
         </div>
-        <span className="muted small">{formatBytes(q.size)}</span>
-        {info && <span className={`badge ${tooBig ? "warn" : "ok"}`}>{tooBig ? "Too large for this Mac" : "Fits"}</span>}
-        {local ? (
-          <span className="muted small status">{local.status.value === "downloading" && p ? percent(p) : local.status.value === "incomplete" ? "Paused" : "Downloaded"}</span>
-        ) : (
-          <button
-            className="secondary-btn"
-            disabled={!!repo.gated || !!noSpace || engine.status !== "ready"}
-            title={repo.gated ? "This model requires accepting a license on Hugging Face" : noSpace ? "Not enough disk space" : undefined}
-            onClick={() => run(downloadModel(engine, id))}
-          >
-            Download
-          </button>
-        )}
+        <div className="muted small">{formatCount(source.downloads)} downloads</div>
+        {local?.status.value === "downloading" && p && <ProgressBar {...p} />}
       </div>
-    );
-  });
+      {error ? (
+        <span className="muted small">{error}</span>
+      ) : !quants ? (
+        <span className="muted small">Loading files…</span>
+      ) : quants.length === 0 ? (
+        <span className="muted small">No GGUF files</span>
+      ) : (
+        <>
+          <select className="quant-select" value={tag} onChange={(e) => setTag(e.target.value)} aria-label="Quantization">
+            {quants.map((q) => (
+              <option key={q.tag} value={q.tag}>
+                {q.tag} · {formatBytes(q.size)}{localModel(q.tag) ? " ✓" : ""}
+              </option>
+            ))}
+          </select>
+          {info && quant && <span className={`badge ${tooBig ? "warn" : "ok"}`}>{tooBig ? "Too large" : "Fits"}</span>}
+          {local ? (
+            <span className="muted small status">{local.status.value === "downloading" && p ? percent(p) : local.status.value === "incomplete" ? "Paused" : "Downloaded"}</span>
+          ) : (
+            <button
+              className="secondary-btn"
+              disabled={!!source.gated || !!noSpace || engine.status !== "ready"}
+              title={source.gated ? "This model requires accepting a license on Hugging Face" : noSpace ? "Not enough disk space" : undefined}
+              onClick={() => run(downloadModel(engine, id))}
+            >
+              Download
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 
 const percent = (p: Progress) => (p.total ? `${Math.floor((p.done / p.total) * 100)}%` : "Starting…");

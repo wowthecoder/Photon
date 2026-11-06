@@ -35,7 +35,7 @@ node scripts/fetch-llama.js
 | `npm start` | Builds the UI and runs it in Electron without the dev server. |
 | `npm run dist` | Packages `release/Photon-<version>-arm64.dmg`, with llama.cpp bundled. |
 | `npm run web` | Runs only the UI at http://localhost:1420 in a browser. The model engine isn't available there. |
-| `npm test` | Runs the quantization-name parser check. |
+| `npm test` | Runs the catalog checks (quantization names, grouping, default quant). |
 
 Hot reload covers everything in `src/`. If you change anything in `electron/`, stop `npm run dev` and start it again.
 
@@ -44,9 +44,10 @@ The `.dmg` isn't code-signed. The first time you open it, macOS will block it: r
 ## Using it
 
 1. Open **Models** in the sidebar, then **Discover**.
-2. Pick a publisher or search. Click a model to see its quantizations, each with its download size and whether it fits in your Mac's memory.
-3. Click **Download**. Progress appears there and in the **Downloaded** tab, where you can pause, resume or delete.
-4. Start a new chat (⌘N) and pick the model in the header. It loads into memory on the first message.
+2. Pick a model family (Qwen, Gemma, GPT-OSS, …) or search. Each row is one model, with its size, context length, estimated download size and total downloads.
+3. Click a model to see where you can download it from: the official publisher and the trusted quantizers (ggml-org, unsloth, bartowski, lmstudio-community). Each source has a quantization picker with exact file sizes, defaulting to a 4-bit file.
+4. Click **Download**. Progress appears there and in the **Downloaded** tab, where you can pause, resume or delete.
+5. Start a new chat (⌘N) and pick the model in the header. It loads into memory on the first message.
 
 Models are stored in `~/Library/Application Support/Photon/models` by default. To use a different folder, go to **Settings → Models folder → Change…**. Changing the folder doesn't move models you've already downloaded.
 
@@ -90,7 +91,7 @@ scripts/fetch-llama.js  Downloads the pinned llama.cpp build into resources/llam
 src/App.tsx           App state: chats, views, streaming, shortcuts
 src/useEngine.ts      Engine state, downloaded models, live download progress
 src/llm.ts            llama-server client: models, downloads, streaming chat
-src/catalog.ts        Hugging Face search, quantization sizes, "fits in memory" check
+src/catalog.ts        Model families, Hugging Face search grouped by base model, quantization sizes
 src/Models.tsx        Models screen: Downloaded and Discover tabs
 src/Chat.tsx          Model picker, messages (markdown, thinking), composer
 src/Sidebar.tsx       Models link, chat list, settings

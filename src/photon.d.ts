@@ -9,5 +9,6 @@ interface Window {
     info(): Promise<SystemInfo>;
     chooseModelsDir(): Promise<boolean>;
     revealModelsDir(): Promise<void>;
+    pruneModels(repo: string): Promise<void>;
   };
 }
