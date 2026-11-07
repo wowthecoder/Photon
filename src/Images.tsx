@@ -13,6 +13,31 @@ const SIZES = [
 
 const imageUrl = (id: string) => `photon-image://local/${id}.png`;
 
+type Input = { url: string; width: number; height: number };
+
+const toDataUrl = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => resolve(reader.result as string);
+    reader.readAsDataURL(blob);
+  });
+
+const loadInput = (url: string) =>
+  new Promise<Input>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ url, width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => reject(new Error("That file isn't an image Photon can read."));
+    img.src = url;
+  });
+
+// keep the input's shape, at most 1024 on the long side, in multiples of 16
+function fitSize({ width, height }: Input) {
+  const scale = Math.min(1, 1024 / Math.max(width, height));
+  const round = (n: number) => Math.max(256, Math.floor((n * scale) / 16) * 16);
+  return { width: round(width), height: round(height) };
+}
+
 type Props = {
   hidden: boolean;
   diffusion: EngineState;
@@ -38,14 +63,46 @@ export function Images({ hidden, diffusion, engine, models, imageModels, gallery
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState("");
   const [open, setOpen] = useState<GeneratedImage | null>(null);
+  const [input, setInput] = useState<Input | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+  const focusPrompt = useRef(false);
   const model = ready.find((m) => m.id === modelId) ?? ready[0];
-  const canGenerate = diffusion.status === "ready" && !!model && !!prompt.trim() && !job;
+  const canEdit = !!model?.edit;
+  const useInput = canEdit && !!input;
+  const needsInput = model?.edit === "required" && !input;
+  const canGenerate = diffusion.status === "ready" && !!model && !!prompt.trim() && !job && !needsInput;
+  // size -1 means "same as the input image"
+  const dims = size === -1 && useInput ? fitSize(input) : SIZES[Math.max(size, 0)];
+
+  async function chooseInput(source: Blob | string | undefined) {
+    if (!source) return;
+    try {
+      setInput(await loadInput(typeof source === "string" ? source : await toDataUrl(source)));
+      setSize(-1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  function clearInput() {
+    setInput(null);
+    if (size === -1) setSize(0);
+  }
+
+  async function editImage(image: GeneratedImage) {
+    if (!canEdit) setModelId((ready.find((m) => m.edit === "required") ?? ready.find((m) => m.edit))?.id ?? modelId);
+    // read through the main process: the page can't fetch photon-image:// across origins
+    await chooseInput(`data:image/png;base64,${await window.photon!.readImage(image.id)}`);
+    focusPrompt.current = true;
+    setOpen(null);
+  }
 
   async function generate() {
     if (!canGenerate) return;
     const text = prompt.trim();
-    const { width, height } = SIZES[size];
+    const { width, height } = dims;
+    const refs = useInput ? [input.url] : undefined;
     const n = Number(seed);
     const useSeed = seed.trim() && Number.isInteger(n) && n >= 0 ? n : Math.floor(Math.random() * 2 ** 31);
     const ctrl = new AbortController();
@@ -59,8 +116,8 @@ export function Images({ hidden, diffusion, engine, models, imageModels, gallery
       await Promise.all(models.filter((m) => ["loaded", "loading"].includes(m.status.value)).map((m) => unloadModel(engine, m.id).catch(() => {})));
       await loadImageModel(diffusion, model);
       setJob({ width, height, loading: false });
-      const b64 = await generateImage(diffusion, { prompt: text, width, height, seed: useSeed }, (progress) => setJob({ width, height, loading: false, progress }), ctrl.signal);
-      const image = { id: crypto.randomUUID(), prompt: text, model: model.name, width, height, seed: useSeed, created: Date.now(), seconds: Math.round((Date.now() - started) / 1000) };
+      const b64 = await generateImage(diffusion, { prompt: text, width, height, seed: useSeed, ref_images: refs }, (progress) => setJob({ width, height, loading: false, progress }), ctrl.signal);
+      const image = { id: crypto.randomUUID(), prompt: text, model: model.name, width, height, seed: useSeed, created: Date.now(), seconds: Math.round((Date.now() - started) / 1000), edited: !!refs };
       await window.photon!.saveImage(image.id, b64);
       setGallery((g) => [image, ...g]);
     } catch (e) {
@@ -70,6 +127,13 @@ export function Images({ hidden, diffusion, engine, models, imageModels, gallery
       abortRef.current = null;
     }
   }
+
+  // focus the prompt once the viewer is gone; removing an open dialog sends focus to the page body
+  useEffect(() => {
+    if (open || !focusPrompt.current) return;
+    focusPrompt.current = false;
+    promptRef.current?.focus();
+  }, [open]);
 
   function reuse(image: GeneratedImage) {
     setPrompt(image.prompt);
@@ -107,11 +171,38 @@ export function Images({ hidden, diffusion, engine, models, imageModels, gallery
             <button className="primary-btn" onClick={onOpenModels}>Browse image models</button>
           </div>
         ) : (
-          <form className="image-composer" onSubmit={(e) => (e.preventDefault(), generate())}>
+          <form
+            className="image-composer"
+            onSubmit={(e) => (e.preventDefault(), generate())}
+            onDragOver={(e) => canEdit && e.preventDefault()}
+            onDrop={(e) => canEdit && (e.preventDefault(), chooseInput(e.dataTransfer.files[0]))}
+          >
+            {canEdit && (
+              <div className="input-image">
+                {input ? (
+                  <>
+                    <img src={input.url} alt="Input image" />
+                    <span className="muted small">Input image · {input.width}×{input.height}</span>
+                    <button type="button" className="link-btn small" disabled={!!job} onClick={clearInput}>Remove</button>
+                  </>
+                ) : (
+                  <>
+                    <label className="secondary-btn">
+                      Add input image
+                      <input type="file" accept="image/*" hidden disabled={!!job} onChange={(e) => (chooseInput(e.target.files?.[0]), (e.target.value = ""))} />
+                    </label>
+                    <span className="muted small">
+                      {model.edit === "required" ? "This model edits an image: add one, drop it here, or pick Edit on an image below." : "Optional: add an image to edit it instead of starting from scratch."}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
             <textarea
+              ref={promptRef}
               rows={3}
               value={prompt}
-              placeholder="Describe the image you want"
+              placeholder={useInput || model.edit === "required" ? "Describe the change, e.g. make it night time" : "Describe the image you want"}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) (e.preventDefault(), generate());
@@ -121,7 +212,8 @@ export function Images({ hidden, diffusion, engine, models, imageModels, gallery
               <select className="quant-select" value={model?.id} disabled={!!job} onChange={(e) => setModelId(e.target.value)} aria-label="Image model">
                 {ready.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
-              <select className="quant-select" value={size} disabled={!!job} onChange={(e) => setSize(Number(e.target.value))} aria-label="Size">
+              <select className="quant-select" value={size === -1 && !useInput ? 0 : size} disabled={!!job} onChange={(e) => setSize(Number(e.target.value))} aria-label="Size">
+                {useInput && <option value={-1}>Same as input · {fitSize(input).width}×{fitSize(input).height}</option>}
                 {SIZES.map((s, i) => <option key={s.label} value={i}>{s.label}</option>)}
               </select>
               <input className="seed-input" type="number" min={0} placeholder="Random seed" value={seed} disabled={!!job} onChange={(e) => setSeed(e.target.value)} aria-label="Seed" />
@@ -129,7 +221,9 @@ export function Images({ hidden, diffusion, engine, models, imageModels, gallery
               {job ? (
                 <button type="button" className="secondary-btn" onClick={() => abortRef.current?.abort()}>Stop</button>
               ) : (
-                <button type="submit" className="primary-btn" disabled={!canGenerate}>Generate</button>
+                <button type="submit" className="primary-btn" disabled={!canGenerate} title={needsInput ? "Add an input image first" : undefined}>
+                  {useInput ? "Edit" : "Generate"}
+                </button>
               )}
             </div>
           </form>
@@ -154,12 +248,23 @@ export function Images({ hidden, diffusion, engine, models, imageModels, gallery
           ))}
         </div>
       </div>
-      {open && <Viewer key={open.id} image={open} onClose={() => setOpen(null)} onReuse={() => reuse(open)} onDelete={() => remove(open)} />}
+      {open && (
+        <Viewer
+          key={open.id}
+          image={open}
+          onClose={() => setOpen(null)}
+          onReuse={() => reuse(open)}
+          onEdit={ready.some((m) => m.edit) ? () => editImage(open) : undefined}
+          onDelete={() => remove(open)}
+        />
+      )}
     </main>
   );
 }
 
-function Viewer({ image, onClose, onReuse, onDelete }: { image: GeneratedImage; onClose: () => void; onReuse: () => void; onDelete: () => void }) {
+type ViewerProps = { image: GeneratedImage; onClose: () => void; onReuse: () => void; onEdit?: () => void; onDelete: () => void };
+
+function Viewer({ image, onClose, onReuse, onEdit, onDelete }: ViewerProps) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => ref.current?.showModal(), []);
 
@@ -169,10 +274,11 @@ function Viewer({ image, onClose, onReuse, onDelete }: { image: GeneratedImage; 
       <div className="viewer-info">
         <p className="viewer-prompt">{image.prompt}</p>
         <p className="muted small">
-          {image.model} · {image.width}×{image.height} · seed {image.seed} · {image.seconds}s · {new Date(image.created).toLocaleString()}
+          {image.edited ? "Edited with " : ""}{image.model} · {image.width}×{image.height} · seed {image.seed} · {image.seconds}s · {new Date(image.created).toLocaleString()}
         </p>
         <div className="viewer-actions">
           <button className="secondary-btn" onClick={onReuse}>Use prompt and seed</button>
+          {onEdit && <button className="secondary-btn" onClick={onEdit}>Edit this image</button>}
           <button className="secondary-btn" onClick={() => window.photon?.revealImage(image.id)}>Show in Finder</button>
           <button className="secondary-btn" onClick={() => navigator.clipboard.writeText(image.prompt)}>Copy prompt</button>
           <span className="spacer" />

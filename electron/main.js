@@ -99,6 +99,7 @@ ipcMain.handle("images:save", (_, id, b64) => {
   fs.mkdirSync(imagesDir(), { recursive: true });
   fs.writeFileSync(file, Buffer.from(b64, "base64"));
 });
+ipcMain.handle("images:read", (_, id) => fs.readFileSync(imageFile(id)).toString("base64"));
 ipcMain.handle("images:delete", (_, id) => fs.rmSync(imageFile(id), { force: true }));
 ipcMain.handle("images:reveal", (_, id) => shell.showItemInFolder(imageFile(id)));
 

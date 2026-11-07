@@ -339,3 +339,6 @@ button { background: none; border: 0; cursor: pointer; }
 .viewer-prompt { white-space: pre-wrap; }
 .viewer-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .tabs.subtabs { width: fit-content; margin: 4px 0 8px; }
+.input-image { display: flex; align-items: center; gap: 10px; }
+.input-image img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; background: var(--surface); }
+.input-image label.secondary-btn { cursor: pointer; }

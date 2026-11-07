@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld("photon", {
   pauseImageModel: (id) => ipcRenderer.invoke("image-models:pause", id),
   deleteImageModel: (id) => ipcRenderer.invoke("image-models:delete", id),
   saveImage: (id, b64) => ipcRenderer.invoke("images:save", id, b64),
+  readImage: (id) => ipcRenderer.invoke("images:read", id),
   deleteImage: (id) => ipcRenderer.invoke("images:delete", id),
   revealImage: (id) => ipcRenderer.invoke("images:reveal", id),
   info: () => ipcRenderer.invoke("info"),

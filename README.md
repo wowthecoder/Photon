@@ -42,7 +42,7 @@ node scripts/fetch-sd.js
 | `npm start` | Builds the UI and runs it in Electron without the dev server. |
 | `npm run dist` | Packages `release/Photon-<version>-arm64.dmg`, with llama.cpp and sd-server bundled. |
 | `npm run web` | Runs only the UI at http://localhost:1420 in a browser. The model engine isn't available there. |
-| `npm test` | Runs the catalog checks (quantization names, grouping, default quant) and the downloader checks (resume, size mismatch). |
+| `npm test` | Runs the catalog checks (quantization names, grouping, default quant) the image catalog checks (grouping by base model) and the downloader checks (resume, size mismatch). |
 
 Hot reload covers everything in `src/`. If you change anything in `electron/`, stop `npm run dev` and start it again.
 
@@ -58,9 +58,10 @@ The `.dmg` isn't code-signed. The first time you open it, macOS will block it: r
 
 To generate images:
 
-1. Open **Models → Image → Discover** and download a model. Each one is a diffusion model, a text encoder and a VAE; files shared between models are downloaded once.
+1. Open **Models → Image → Discover**. Like text models, pick a family or search Hugging Face, open a model to see its sources, choose a quantization and click **Download**. Photon also downloads the text encoder and VAE that model needs; files shared between models are downloaded once.
 2. Open **Images** in the sidebar, describe the image, pick a size and click **Generate**. A preview updates on every step. On an M5 Pro, Z-Image Turbo takes about 75 s at 1024×1024 and FLUX.2 klein 4B about 15 s at 768×768.
-3. Click an image to see its prompt and seed, reuse them, show it in Finder or delete it.
+3. To edit an image, pick a model that can edit (Qwen-Image-Edit, FLUX.1 Kontext, FLUX.2 or FLUX.3 klein, Qwen-Image 2.1), then add an input image, drop one on the prompt box, or click **Edit this image** on a picture in your gallery. Describe the change and click **Edit**. Qwen-Image-Edit needs an input image; the others can also start from scratch.
+4. Click an image to see its prompt and seed, reuse them, edit it, show it in Finder or delete it.
 
 Models are stored in `~/Library/Application Support/Photon/models` by default. To use a different folder, go to **Settings → Models folder → Change…**. Changing the folder doesn't move models you've already downloaded.
 
@@ -87,7 +88,7 @@ Electron main: starts and stops both servers, owns the models folder and config,
 
 - **Startup.** On launch, `electron/engine.js` starts `llama-server` with no model, which puts it in "router mode", and points it at the models folder with the `LLAMA_CACHE` environment variable. Each launch gets a free port and a fresh API key, so other apps and websites can't use the server.
 - **Memory.** `--models-max 1` keeps one model in memory at a time. `--sleep-idle-seconds 600` frees that memory after 10 minutes without use. Generating an image unloads the chat model, and sending a chat message unloads the image model.
-- **Image models.** sd-server can't download models, so the main process does: files go to `<models folder>/diffusion/{diffusion_models,text_encoders,vae}` and resume from `.part` files. The list of image models and their files is `electron/imageModels.json`. Generated images are saved as PNGs in `~/Library/Application Support/Photon/images`.
+- **Image models.** sd-server can't download models, so the main process does: files go to `<models folder>/diffusion/{diffusion_models,text_encoders,vae}` and resume from `.part` files. Only base models listed in `electron/imageFamilies.json` can run: each entry names its sd-server recipe and the text encoder and VAE to download with it. To support another model, add its base model there with a recipe from stable-diffusion.cpp's `examples/server/recipes`, and set `edit` to `required` or `optional` if the recipe takes reference images. Your downloaded image models are listed in `<models folder>/diffusion/models.json`. Generated images are saved as PNGs in `~/Library/Application Support/Photon/images`.
 - **Logs.** The servers' output goes to `llama-server.log` and `sd-server.log` in `~/Library/Application Support/Photon/`.
 - **Upgrading llama.cpp.** Change `BUILD` in `scripts/fetch-llama.js` to a newer release from https://github.com/ggml-org/llama.cpp/releases.
 - **Upgrading stable-diffusion.cpp.** Change `TAG` in `scripts/fetch-sd.js` to a newer release from https://github.com/leejet/stable-diffusion.cpp/releases. If the patch no longer applies, update it against `examples/server/main.cpp`.
@@ -107,7 +108,7 @@ Electron main: starts and stops both servers, owns the models folder and config,
 electron/main.js      Window, config.json, IPC handlers (folder picker, disk info)
 electron/engine.js    Starts, health-checks and stops a local server (llama-server, sd-server)
 electron/imageModels.js  Image model download status, download/pause/delete
-electron/imageModels.json  The image models offered and the files each needs
+electron/imageFamilies.json  Supported image base models: recipe, text encoder and VAE
 electron/download.js  Resumable file download (tested by download.test.js)
 electron/preload.cjs  Exposes window.photon (engine state, folder actions) to the UI
 scripts/dev.js        Starts Vite, then Electron pointed at it
@@ -117,6 +118,7 @@ src/App.tsx           App state: chats, views, streaming, shortcuts
 src/useEngine.ts      Engine state, downloaded models, live download progress
 src/llm.ts            llama-server client: models, downloads, streaming chat
 src/diffusion.ts      sd-server client: load an image model, run and poll a generation
+src/imageCatalog.ts   Hugging Face search for image GGUFs, grouped by supported base model
 src/Images.tsx        Images screen: prompt, live preview, gallery, image viewer
 src/catalog.ts        Model families, Hugging Face search grouped by base model, quantization sizes
 src/Models.tsx        Models screen: Text and Image sections, each with Downloaded and Discover tabs

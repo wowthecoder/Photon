@@ -1,0 +1,627 @@
+[
+  {
+    "name": "Z-Image",
+    "maker": "Alibaba Tongyi",
+    "search": [
+      "z-image"
+    ],
+    "bases": [
+      {
+        "id": "Tongyi-MAI/Z-Image-Turbo",
+        "recipe": "z-image-turbo",
+        "license": "Apache 2.0",
+        "description": "Fast, photorealistic, 9 steps",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+            "path": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+            "size": 2497281120
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Z-Image-Turbo",
+            "path": "split_files/vae/ae.safetensors",
+            "size": 335304388
+          }
+        ]
+      },
+      {
+        "id": "Tongyi-MAI/Z-Image",
+        "recipe": "z-image",
+        "license": "Apache 2.0",
+        "description": "Base model, 20 steps, more varied",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+            "path": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+            "size": 2497281120
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Z-Image-Turbo",
+            "path": "split_files/vae/ae.safetensors",
+            "size": 335304388
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Qwen-Image",
+    "maker": "Alibaba Qwen",
+    "search": [
+      "qwen-image"
+    ],
+    "bases": [
+      {
+        "id": "Qwen/Qwen-Image-2.1-Turbo",
+        "recipe": "qwen-image-21-turbo",
+        "license": "Qwen Research",
+        "description": "Strong text rendering, 8 steps",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "Qwen/Qwen3-VL-8B-Instruct-GGUF",
+            "path": "Qwen3VL-8B-Instruct-Q4_K_M.gguf",
+            "size": 5027784800
+          },
+          {
+            "slot": "llm_vision",
+            "repo": "Qwen/Qwen3-VL-8B-Instruct-GGUF",
+            "path": "mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf",
+            "size": 752289728
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Qwen-Image-2.1",
+            "path": "vae/qwen_image_2.1_vae_bf16.safetensors",
+            "size": 675509688
+          }
+        ],
+        "edit": "optional"
+      },
+      {
+        "id": "Qwen/Qwen-Image-2.1",
+        "recipe": "qwen-image-21",
+        "license": "Qwen Research",
+        "description": "Strong text rendering, 20 steps",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "Qwen/Qwen3-VL-8B-Instruct-GGUF",
+            "path": "Qwen3VL-8B-Instruct-Q4_K_M.gguf",
+            "size": 5027784800
+          },
+          {
+            "slot": "llm_vision",
+            "repo": "Qwen/Qwen3-VL-8B-Instruct-GGUF",
+            "path": "mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf",
+            "size": 752289728
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Qwen-Image-2.1",
+            "path": "vae/qwen_image_2.1_vae_bf16.safetensors",
+            "size": 675509688
+          }
+        ],
+        "edit": "optional"
+      },
+      {
+        "id": "Qwen/Qwen-Image-2512",
+        "recipe": "qwen-image",
+        "license": "Apache 2.0",
+        "description": "December 2025 Qwen-Image, 20 steps",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "mradermacher/Qwen2.5-VL-7B-Instruct-GGUF",
+            "path": "Qwen2.5-VL-7B-Instruct.Q4_K_M.gguf",
+            "size": 4683072512
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Qwen-Image_ComfyUI",
+            "path": "split_files/vae/qwen_image_vae.safetensors",
+            "size": 253806246
+          }
+        ]
+      },
+      {
+        "id": "Qwen/Qwen-Image",
+        "recipe": "qwen-image",
+        "license": "Apache 2.0",
+        "description": "Original Qwen-Image, 20 steps",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "mradermacher/Qwen2.5-VL-7B-Instruct-GGUF",
+            "path": "Qwen2.5-VL-7B-Instruct.Q4_K_M.gguf",
+            "size": 4683072512
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Qwen-Image_ComfyUI",
+            "path": "split_files/vae/qwen_image_vae.safetensors",
+            "size": 253806246
+          }
+        ]
+      },
+      {
+        "id": "Qwen/Qwen-Image-Edit-2511",
+        "recipe": "qwen-image-edit-2511",
+        "license": "Apache 2.0",
+        "description": "Edits an input image from instructions",
+        "edit": "required",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "mradermacher/Qwen2.5-VL-7B-Instruct-GGUF",
+            "path": "Qwen2.5-VL-7B-Instruct.Q4_K_M.gguf",
+            "size": 4683072512
+          },
+          {
+            "slot": "llm_vision",
+            "repo": "mradermacher/Qwen2.5-VL-7B-Instruct-GGUF",
+            "path": "Qwen2.5-VL-7B-Instruct.mmproj-Q8_0.gguf",
+            "size": 853119712
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Qwen-Image_ComfyUI",
+            "path": "split_files/vae/qwen_image_vae.safetensors",
+            "size": 253806246
+          }
+        ]
+      },
+      {
+        "id": "Qwen/Qwen-Image-Edit-2509",
+        "recipe": "qwen-image-edit-2509",
+        "license": "Apache 2.0",
+        "description": "Edits one or more input images",
+        "edit": "required",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "mradermacher/Qwen2.5-VL-7B-Instruct-GGUF",
+            "path": "Qwen2.5-VL-7B-Instruct.Q4_K_M.gguf",
+            "size": 4683072512
+          },
+          {
+            "slot": "llm_vision",
+            "repo": "mradermacher/Qwen2.5-VL-7B-Instruct-GGUF",
+            "path": "Qwen2.5-VL-7B-Instruct.mmproj-Q8_0.gguf",
+            "size": 853119712
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Qwen-Image_ComfyUI",
+            "path": "split_files/vae/qwen_image_vae.safetensors",
+            "size": 253806246
+          }
+        ]
+      },
+      {
+        "id": "Qwen/Qwen-Image-Edit",
+        "recipe": "qwen-image-edit",
+        "license": "Apache 2.0",
+        "description": "Original Qwen image editor",
+        "edit": "required",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "mradermacher/Qwen2.5-VL-7B-Instruct-GGUF",
+            "path": "Qwen2.5-VL-7B-Instruct.Q4_K_M.gguf",
+            "size": 4683072512
+          },
+          {
+            "slot": "llm_vision",
+            "repo": "mradermacher/Qwen2.5-VL-7B-Instruct-GGUF",
+            "path": "Qwen2.5-VL-7B-Instruct.mmproj-Q8_0.gguf",
+            "size": 853119712
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Qwen-Image_ComfyUI",
+            "path": "split_files/vae/qwen_image_vae.safetensors",
+            "size": 253806246
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "FLUX.2",
+    "maker": "Black Forest Labs",
+    "search": [
+      "flux.2"
+    ],
+    "bases": [
+      {
+        "id": "black-forest-labs/FLUX.2-klein-4B",
+        "recipe": "flux2-klein-4b",
+        "license": "Apache 2.0",
+        "description": "Small and quick, 4 steps",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+            "path": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+            "size": 2497281120
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Flux-2-Klein-4B",
+            "path": "split_files/vae/flux2-vae.safetensors",
+            "size": 336211292
+          }
+        ],
+        "edit": "optional"
+      },
+      {
+        "id": "black-forest-labs/FLUX.2-klein-base-4B",
+        "recipe": "flux2-klein-base-4b",
+        "license": "Apache 2.0",
+        "description": "Undistilled base, slower, more varied",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+            "path": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+            "size": 2497281120
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Flux-2-Klein-4B",
+            "path": "split_files/vae/flux2-vae.safetensors",
+            "size": 336211292
+          }
+        ],
+        "edit": "optional"
+      },
+      {
+        "id": "black-forest-labs/FLUX.2-klein-9B",
+        "recipe": "flux2-klein-9b",
+        "license": "FLUX Non-Commercial",
+        "description": "Larger and sharper, 4 steps",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "unsloth/Qwen3-8B-GGUF",
+            "path": "Qwen3-8B-Q4_K_M.gguf",
+            "size": 5027784512
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Flux-2-Klein-4B",
+            "path": "split_files/vae/flux2-vae.safetensors",
+            "size": 336211292
+          }
+        ],
+        "edit": "optional"
+      },
+      {
+        "id": "black-forest-labs/FLUX.2-klein-base-9B",
+        "recipe": "flux2-klein-base-9b",
+        "license": "FLUX Non-Commercial",
+        "description": "Undistilled 9B base",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "unsloth/Qwen3-8B-GGUF",
+            "path": "Qwen3-8B-Q4_K_M.gguf",
+            "size": 5027784512
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Flux-2-Klein-4B",
+            "path": "split_files/vae/flux2-vae.safetensors",
+            "size": 336211292
+          }
+        ],
+        "edit": "optional"
+      },
+      {
+        "id": "black-forest-labs/FLUX.2-dev",
+        "recipe": "flux2-dev",
+        "license": "FLUX Non-Commercial",
+        "description": "Largest FLUX.2, 32B, 20 steps",
+        "edit": "optional",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "unsloth/Mistral-Small-3.2-24B-Instruct-2506-GGUF",
+            "path": "Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+            "size": 14333922848
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Flux-2-Klein-4B",
+            "path": "split_files/vae/flux2-vae.safetensors",
+            "size": 336211292
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "FLUX.3 klein",
+    "maker": "Black Forest Labs",
+    "search": [
+      "flux-3-image-klein"
+    ],
+    "bases": [
+      {
+        "id": "black-forest-labs/flux-3-image-klein",
+        "recipe": "flux3-klein",
+        "license": "FLUX Kommunity",
+        "description": "Newest klein, 16 steps",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "Qwen/Qwen3-VL-4B-Instruct-GGUF",
+            "path": "Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+            "size": 2497281664
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Flux-2-Klein-4B",
+            "path": "split_files/vae/flux2-vae.safetensors",
+            "size": 336211292
+          }
+        ],
+        "edit": "optional"
+      },
+      {
+        "id": "black-forest-labs/flux-3-image-klein-base",
+        "recipe": "flux3-klein-base",
+        "license": "FLUX Kommunity",
+        "description": "Undistilled FLUX.3 klein base",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "Qwen/Qwen3-VL-4B-Instruct-GGUF",
+            "path": "Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+            "size": 2497281664
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Flux-2-Klein-4B",
+            "path": "split_files/vae/flux2-vae.safetensors",
+            "size": 336211292
+          }
+        ],
+        "edit": "optional"
+      }
+    ]
+  },
+  {
+    "name": "FLUX.1",
+    "maker": "Black Forest Labs",
+    "search": [
+      "flux.1"
+    ],
+    "bases": [
+      {
+        "id": "black-forest-labs/FLUX.1-schnell",
+        "recipe": "flux1-schnell",
+        "license": "Apache 2.0",
+        "description": "Fast FLUX.1, 4 steps",
+        "files": [
+          {
+            "slot": "clip_l",
+            "repo": "comfyanonymous/flux_text_encoders",
+            "path": "clip_l.safetensors",
+            "size": 246144152
+          },
+          {
+            "slot": "t5xxl",
+            "repo": "comfyanonymous/flux_text_encoders",
+            "path": "t5xxl_fp8_e4m3fn.safetensors",
+            "size": 4893934904
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Z-Image-Turbo",
+            "path": "split_files/vae/ae.safetensors",
+            "size": 335304388
+          }
+        ]
+      },
+      {
+        "id": "black-forest-labs/FLUX.1-dev",
+        "recipe": "flux1-dev",
+        "license": "FLUX.1 Non-Commercial",
+        "description": "FLUX.1 quality model, 20 steps",
+        "files": [
+          {
+            "slot": "clip_l",
+            "repo": "comfyanonymous/flux_text_encoders",
+            "path": "clip_l.safetensors",
+            "size": 246144152
+          },
+          {
+            "slot": "t5xxl",
+            "repo": "comfyanonymous/flux_text_encoders",
+            "path": "t5xxl_fp8_e4m3fn.safetensors",
+            "size": 4893934904
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Z-Image-Turbo",
+            "path": "split_files/vae/ae.safetensors",
+            "size": 335304388
+          }
+        ]
+      },
+      {
+        "id": "black-forest-labs/FLUX.1-Krea-dev",
+        "recipe": "flux1-dev",
+        "license": "FLUX.1 Non-Commercial",
+        "description": "Krea's photographic FLUX.1 dev",
+        "files": [
+          {
+            "slot": "clip_l",
+            "repo": "comfyanonymous/flux_text_encoders",
+            "path": "clip_l.safetensors",
+            "size": 246144152
+          },
+          {
+            "slot": "t5xxl",
+            "repo": "comfyanonymous/flux_text_encoders",
+            "path": "t5xxl_fp8_e4m3fn.safetensors",
+            "size": 4893934904
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Z-Image-Turbo",
+            "path": "split_files/vae/ae.safetensors",
+            "size": 335304388
+          }
+        ]
+      },
+      {
+        "id": "black-forest-labs/FLUX.1-Kontext-dev",
+        "recipe": "flux1-kontext",
+        "license": "FLUX.1 Non-Commercial",
+        "description": "Edits an input image, or text to image",
+        "edit": "optional",
+        "files": [
+          {
+            "slot": "clip_l",
+            "repo": "comfyanonymous/flux_text_encoders",
+            "path": "clip_l.safetensors",
+            "size": 246144152
+          },
+          {
+            "slot": "t5xxl",
+            "repo": "comfyanonymous/flux_text_encoders",
+            "path": "t5xxl_fp8_e4m3fn.safetensors",
+            "size": 4893934904
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Z-Image-Turbo",
+            "path": "split_files/vae/ae.safetensors",
+            "size": 335304388
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Krea 2",
+    "maker": "Krea",
+    "search": [
+      "krea-2",
+      "krea2"
+    ],
+    "bases": [
+      {
+        "id": "krea/Krea-2-Turbo",
+        "recipe": "krea2-turbo",
+        "license": "Krea 2 Community",
+        "description": "Fast and stylish, 8 steps",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "Qwen/Qwen3-VL-4B-Instruct-GGUF",
+            "path": "Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+            "size": 2497281664
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+            "path": "split_files/vae/wan_2.1_vae.safetensors",
+            "size": 253815318
+          }
+        ]
+      },
+      {
+        "id": "krea/Krea-2-Raw",
+        "recipe": "krea2-raw",
+        "license": "Krea 2 Community",
+        "description": "Undistilled Krea 2, 20 steps",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "Qwen/Qwen3-VL-4B-Instruct-GGUF",
+            "path": "Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+            "size": 2497281664
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+            "path": "split_files/vae/wan_2.1_vae.safetensors",
+            "size": 253815318
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "MOSS-Image",
+    "maker": "OpenMOSS",
+    "search": [
+      "moss-image"
+    ],
+    "bases": [
+      {
+        "id": "OpenMOSS-Team/MOSS-Image-SFT",
+        "recipe": "moss-image-sft",
+        "license": "Apache 2.0",
+        "description": "Instruction-tuned MOSS-Image, 20 steps",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "unsloth/Qwen3.5-9B-GGUF",
+            "path": "Qwen3.5-9B-Q4_K_M.gguf",
+            "size": 5680522464
+          },
+          {
+            "slot": "tokenizer",
+            "repo": "OpenMOSS-Team/MOSS-Image-Base",
+            "path": "tokenizer/tokenizer.json",
+            "file": "moss-image-qwen3.5-tokenizer.json",
+            "size": 19989325
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Flux-2-Klein-4B",
+            "path": "split_files/vae/flux2-vae.safetensors",
+            "size": 336211292
+          }
+        ]
+      },
+      {
+        "id": "OpenMOSS-Team/MOSS-Image-Base",
+        "recipe": "moss-image-base",
+        "license": "Apache 2.0",
+        "description": "MOSS-Image base, 20 steps",
+        "files": [
+          {
+            "slot": "llm",
+            "repo": "unsloth/Qwen3.5-9B-GGUF",
+            "path": "Qwen3.5-9B-Q4_K_M.gguf",
+            "size": 5680522464
+          },
+          {
+            "slot": "tokenizer",
+            "repo": "OpenMOSS-Team/MOSS-Image-Base",
+            "path": "tokenizer/tokenizer.json",
+            "file": "moss-image-qwen3.5-tokenizer.json",
+            "size": 19989325
+          },
+          {
+            "slot": "vae",
+            "repo": "Comfy-Org/Flux-2-Klein-4B",
+            "path": "split_files/vae/flux2-vae.safetensors",
+            "size": 336211292
+          }
+        ]
+      }
+    ]
+  }
+]

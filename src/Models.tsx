@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { ConfirmButton } from "./ConfirmButton";
 import { FAMILIES, defaultQuant, estimateQ4, familyVariants, topVariants, fits, formatBytes, formatCount, formatParams, listQuants, searchVariants, type Family, type Quant, type Source, type Variant } from "./catalog";
 import { deleteModel, downloadModel, modelLabel, pauseDownload, sumProgress, type LocalModel, type Progress } from "./llm";
-import { isDownloaded, isDownloading, isStarted, modelDone, modelError, modelSize } from "./diffusion";
+import { isDownloaded, isDownloading, modelDone, modelError, modelSize } from "./diffusion";
+import { IMAGE_FAMILIES, extrasSize, imageFamilyVariants, listImageFiles, searchImageVariants, topImageVariants, type ImageBase, type ImageFamily, type ImageFile, type ImageResults } from "./imageCatalog";
 import { SidebarIcon, TrashIcon } from "./icons";
 
 export type ModelKind = "text" | "image";
@@ -116,79 +117,213 @@ function Downloaded({ engine, models, progress, info, run, onDiscover }: TabProp
 }
 
 function ImageDownloaded({ imageModels, info, run, onDiscover }: TabProps) {
-  const started = imageModels.filter(isStarted);
   return (
     <>
       <DiskInfo info={info} />
-      {started.length === 0 && (
+      {imageModels.length === 0 && (
         <div className="empty-card">
           <p>No image models downloaded yet.</p>
           <button className="primary-btn" onClick={onDiscover}>Browse image models</button>
         </div>
       )}
-      {started.map((m) => <ImageModelRow key={m.id} model={m} info={info} run={run} />)}
+      {imageModels.map((m) => <ImageModelRow key={m.id} model={m} run={run} />)}
     </>
   );
 }
 
-// ponytail: searches the curated list in electron/imageModels.json; open Hugging Face search needs a file mapping per model, add it with more recipes
-function ImageDiscover({ imageModels, info, run }: TabProps) {
-  const [query, setQuery] = useState("");
-  const q = query.trim().toLowerCase();
-  const shown = imageModels.filter((m) => !q || `${m.name} ${m.maker} ${m.description}`.toLowerCase().includes(q));
-
-  return (
-    <>
-      <form className="search" onSubmit={(e) => e.preventDefault()}>
-        <input type="search" placeholder="Search image models, e.g. flux" value={query} onChange={(e) => setQuery(e.target.value)} />
-      </form>
-      <h3 className="section-title">{q ? `Results for “${query.trim()}”` : "Image Generation Models"}</h3>
-      {shown.length === 0 && <p className="muted">No image models match.</p>}
-      {shown.map((m) => <ImageModelRow key={m.id} model={m} info={info} run={run} discover />)}
-    </>
-  );
-}
-
-function ImageModelRow({ model, info, run, discover }: { model: ImageModel; info: SystemInfo | null; run: TabProps["run"]; discover?: boolean }) {
+function ImageModelRow({ model, run }: { model: ImageModel; run: TabProps["run"] }) {
   const size = modelSize(model);
   const done = modelDone(model);
   const downloaded = isDownloaded(model);
   const downloading = isDownloading(model);
   const error = modelError(model);
-  const tooBig = info && !fits(size, info.totalMem);
-  const noSpace = info && size - done > info.freeBytes;
   const photon = window.photon;
 
   return (
     <div className="row">
       <div className="row-main">
         <div className="row-title">{model.name}</div>
-        <div className={`small ${error ? "warn-text" : "muted"}`}>{error ?? `${model.maker} · ${model.description} · ${model.license}`}</div>
+        <div className={`small ${error ? "warn-text" : "muted"}`}>{error ?? `${model.repo} · ${model.license}`}</div>
         {downloading && <ProgressBar done={done} total={size} />}
       </div>
       <span className="muted small" title="Model, text encoder and VAE">{formatBytes(size)}</span>
-      {discover && info && !downloaded && <span className={`badge ${tooBig ? "warn" : "ok"}`}>{tooBig ? "Too large" : "Fits"}</span>}
       {downloaded ? (
-        <span className="muted small status">{discover ? "Downloaded" : "Ready"}</span>
+        <span className="muted small status">Ready</span>
       ) : downloading ? (
         <>
           <span className="muted small">{percent({ done, total: size })}</span>
           <button className="secondary-btn" onClick={() => run(photon!.pauseImageModel(model.id))}>Pause</button>
         </>
       ) : (
-        <button
-          className="secondary-btn"
-          disabled={!photon || !!noSpace}
-          title={noSpace ? "Not enough disk space" : undefined}
-          onClick={() => run(photon!.downloadImageModel(model.id))}
-        >
-          {isStarted(model) ? "Resume" : "Download"}
-        </button>
+        <button className="secondary-btn" disabled={!photon} onClick={() => run(photon!.downloadImageModel(model.id))}>Resume</button>
       )}
-      {!discover && !downloading && (
+      {!downloading && (
         <ConfirmButton title="Delete model" onConfirm={() => run(photon!.deleteImageModel(model.id))}>
           <TrashIcon />
         </ConfirmButton>
+      )}
+    </div>
+  );
+}
+
+function ImageDiscover(props: TabProps) {
+  const [draft, setDraft] = useState("");
+  const [query, setQuery] = useState("");
+  const [family, setFamily] = useState<ImageFamily | null>(null);
+
+  return (
+    <>
+      <form className="search" onSubmit={(e) => (e.preventDefault(), setQuery(draft.trim()))}>
+        <input
+          type="search"
+          placeholder="Search image models, e.g. qwen-image turbo"
+          value={draft}
+          onChange={(e) => (setDraft(e.target.value), !e.target.value.trim() && setQuery(""))}
+        />
+      </form>
+      {query ? (
+        <ImageVariantList key={`q:${query}`} title={`Results for “${query}”`} load={() => searchImageVariants(query)} onBack={() => (setDraft(""), setQuery(""))} {...props} />
+      ) : family ? (
+        <ImageVariantList key={family.name} title={family.name} subtitle={family.maker} load={() => imageFamilyVariants(family)} onBack={() => setFamily(null)} {...props} />
+      ) : (
+        <>
+          <h3 className="section-title">Popular Model Families</h3>
+          <div className="family-grid">
+            {IMAGE_FAMILIES.map((f) => (
+              <button key={f.name} className="family-card" onClick={() => setFamily(f)}>
+                <span className="family-name">{f.name}</span>
+                <span className="muted small">{f.maker}</span>
+              </button>
+            ))}
+          </div>
+          <ImageVariantList title="Top Downloaded from HuggingFace" load={topImageVariants} {...props} />
+        </>
+      )}
+    </>
+  );
+}
+
+type ImageListProps = TabProps & { title: string; subtitle?: string; load: () => Promise<ImageResults>; onBack?: () => void };
+
+function ImageVariantList({ title, subtitle, load, onBack, ...props }: ImageListProps) {
+  const [results, setResults] = useState<ImageResults | null>(null);
+  const [error, setError] = useState("");
+  const [open, setOpen] = useState<string | null>(null);
+  const [allSources, setAllSources] = useState(false);
+  const toggle = (id: string) => (setOpen(open === id ? null : id), setAllSources(false));
+
+  useEffect(() => {
+    let live = true;
+    load().then((r) => live && setResults(r), (e) => live && setError(e.message));
+    return () => void (live = false);
+  }, []);
+
+  return (
+    <>
+      {onBack ? (
+        <div className="list-header">
+          <button className="link-btn" onClick={onBack}>← All models</button>
+          <h2>{title}</h2>
+          {subtitle && <span className="muted">{subtitle}</span>}
+        </div>
+      ) : (
+        <h3 className="section-title">{title}</h3>
+      )}
+      {error && <p className="banner">{error}</p>}
+      {!results && !error && <p className="muted">Loading…</p>}
+      {results?.variants.length === 0 && <p className="muted">No supported image models found.</p>}
+      {results?.variants.map((v) => {
+        const community = v.sources.every((s) => s.kind === "community");
+        const editing = v.base.edit === "required" ? "Image editing" : v.base.edit === "optional" ? "Can edit images" : null;
+        const details = [v.base.family, v.base.description, editing, v.base.license, `${v.sources.length} source${v.sources.length > 1 ? "s" : ""}`];
+        return (
+          <div key={v.id} className="repo">
+            <button className="row row-btn" onClick={() => toggle(v.id)} aria-expanded={open === v.id}>
+              <div className="row-main">
+                <div className="row-title">{v.name}</div>
+                <div className="muted small">{details.filter(Boolean).join(" · ")}</div>
+              </div>
+              <span className="muted small">{formatCount(v.downloads)} downloads</span>
+              {community && <span className="badge warn" title="Not from the model's maker or a trusted quantizer">Community</span>}
+              <span className="muted">{open === v.id ? "▾" : "▸"}</span>
+            </button>
+            {open === v.id && (allSources ? v.sources : v.sources.slice(0, SOURCES_SHOWN)).map((s) => <ImageSourceRow key={s.repo} source={s} base={v.base} {...props} />)}
+            {open === v.id && !allSources && v.sources.length > SOURCES_SHOWN && (
+              <button className="link-btn more" onClick={() => setAllSources(true)}>
+                Show {v.sources.length - SOURCES_SHOWN} more sources
+              </button>
+            )}
+          </div>
+        );
+      })}
+      {!!results?.unsupported && (
+        <p className="muted small">
+          {results.unsupported} more GGUF image model{results.unsupported > 1 ? "s" : ""} on Hugging Face use a model type Photon can't run yet.
+        </p>
+      )}
+    </>
+  );
+}
+
+function ImageSourceRow({ source, base, imageModels, info, run }: TabProps & { source: Source; base: ImageBase }) {
+  const [files, setFiles] = useState<ImageFile[] | null>(null);
+  const [selected, setSelected] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    listImageFiles(source.repo).then((f) => (setFiles(f), setSelected(defaultQuant(f, info?.totalMem)?.path ?? "")), (e) => setError(e.message));
+  }, [source.repo]);
+
+  // a repo can hold several models with the same quantization in subfolders, so files are picked by path
+  const localModel = (path: string) => imageModels.find((m) => m.id === `${source.repo}:${path}`);
+  const file = files?.find((f) => f.path === selected);
+  const local = localModel(selected);
+  const sameTag = (f: ImageFile) => files!.filter((g) => g.tag === f.tag).length > 1;
+  const extras = extrasSize(base);
+  const total = (file?.size ?? 0) + extras;
+  const tooBig = file && info && !fits(total, info.totalMem);
+  const noSpace = file && info && total > info.freeBytes;
+  const downloading = local && isDownloading(local);
+
+  return (
+    <div className="row quant">
+      <div className="row-main">
+        <div className="row-title">
+          {source.author} {source.kind === "official" && <span className="badge">Official</span>}
+          {source.kind === "community" && <span className="badge warn" title="Unreviewed upload">Community</span>}
+        </div>
+        <div className="muted small">{formatCount(source.downloads)} downloads · plus {formatBytes(extras)} text encoder and VAE</div>
+        {downloading && <ProgressBar done={modelDone(local)} total={modelSize(local)} />}
+      </div>
+      {error ? (
+        <span className="muted small">{error}</span>
+      ) : !files ? (
+        <span className="muted small">Loading files…</span>
+      ) : files.length === 0 ? (
+        <span className="muted small">No GGUF files</span>
+      ) : (
+        <>
+          <select className="quant-select" value={selected} onChange={(e) => setSelected(e.target.value)} aria-label="Quantization">
+            {files.map((f) => (
+              <option key={f.path} value={f.path}>
+                {sameTag(f) ? f.path : f.tag} · {formatBytes(f.size)}{localModel(f.path) ? " ✓" : ""}
+              </option>
+            ))}
+          </select>
+          {info && file && <span className={`badge ${tooBig ? "warn" : "ok"}`} title="Including text encoder and VAE">{tooBig ? "Too large" : "Fits"}</span>}
+          {local ? (
+            <span className="muted small status">{downloading ? percent({ done: modelDone(local), total: modelSize(local) }) : isDownloaded(local) ? "Downloaded" : "Paused"}</span>
+          ) : (
+            <button
+              className="secondary-btn"
+              disabled={!window.photon || !file || !!source.gated || !!noSpace}
+              title={source.gated ? "This model requires accepting a license on Hugging Face" : noSpace ? "Not enough disk space" : undefined}
+              onClick={() => file && run(window.photon!.downloadImageModel({ base: base.id, repo: source.repo, path: file.path, quant: file.tag, size: file.size }))}
+            >
+              Download
+            </button>
+          )}
+        </>
       )}
     </div>
   );

@@ -21,7 +21,7 @@ export const FAMILIES: Family[] = [
   { name: "SmolLM", maker: "Hugging Face", org: "HuggingFaceTB", keywords: ["smollm"] },
 ];
 
-type Repo = {
+export type Repo = {
   id: string;
   downloads: number;
   gated: false | string;
@@ -34,15 +34,15 @@ export type Variant = { id: string; name: string; org: string; params?: number; 
 export type Quant = { tag: string; size: number };
 
 const CHAT = new Set([undefined, "text-generation", "image-text-to-text"]);
-const RANK = { official: 0, trusted: 1, community: 2 };
+export const RANK = { official: 0, trusted: 1, community: 2 };
 const OFFICIAL = new Set(FAMILIES.map((f) => f.org.toLowerCase()));
 const QUANT = /[-_.]((?:UD-)?(?:I?Q\d(?:_[A-Z0-9]+)*|BF16|F16|F32|MXFP4(?:_MOE)?))(?:-\d{5}-of-\d{5})?\.gguf$/i;
 
 export const quantTag = (path: string) => (/mmproj/i.test(path) ? undefined : path.match(QUANT)?.[1].toUpperCase());
 
-const quantizedFrom = (tags: string[] = []) => tags.find((t) => t.startsWith("base_model:quantized:"))?.slice("base_model:quantized:".length);
+export const quantizedFrom = (tags: string[] = []) => tags.find((t) => t.startsWith("base_model:quantized:"))?.slice("base_model:quantized:".length);
 
-async function get<T>(path: string): Promise<T> {
+export async function get<T>(path: string): Promise<T> {
   const res = await fetch(HF + path);
   if (!res.ok) throw new Error(`Hugging Face returned ${res.status}`);
   return res.json();
@@ -78,10 +78,10 @@ export function groupVariants(repos: Repo[], officialOrg?: string): Variant[] {
   return [...variants.values()].sort((a, b) => b.downloads - a.downloads);
 }
 
-const cache = new Map<string, Promise<Variant[]>>();
+const cache = new Map<string, Promise<unknown>>();
 
-function cached(key: string, load: () => Promise<Variant[]>) {
-  let p = cache.get(key);
+export function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
+  let p = cache.get(key) as Promise<T> | undefined;
   if (!p) {
     p = load();
     p.catch(() => cache.delete(key));
@@ -121,9 +121,9 @@ export const formatCount = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M`
 
 export const formatParams = (n: number) => (n >= 9.95e8 ? `${(n / 1e9).toFixed(n >= 9.95e9 ? 0 : 1)}B` : `${Math.round(n / 1e6)}M`);
 
-const PREFERRED = ["Q4_K_M", "UD-Q4_K_XL", "Q4_K_S", "Q4_0", "MXFP4", "MXFP4_MOE", "IQ4_XS", "Q8_0"];
+const PREFERRED = ["Q4_K_M", "Q4_K", "UD-Q4_K_XL", "Q4_K_S", "Q4_0", "MXFP4", "MXFP4_MOE", "IQ4_XS", "Q8_0"];
 
-export const defaultQuant = (quants: Quant[], totalMem = Infinity) =>
+export const defaultQuant = <T extends Quant>(quants: T[], totalMem = Infinity): T | undefined =>
   PREFERRED.map((t) => quants.find((q) => q.tag === t)).find(Boolean) ??
   [...quants].reverse().find((q) => fits(q.size, totalMem)) ??
   quants[0];

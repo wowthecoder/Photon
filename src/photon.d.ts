@@ -1,7 +1,23 @@
 type EngineState = { status: "starting" | "ready" | "error"; url?: string; apiKey?: string; error?: string };
 type FileState = "done" | "downloading" | "paused" | "missing" | "error";
 type ImageModelFile = { slot: string; repo: string; path: string; size: number; id: string; done: number; state: FileState; error?: string };
-type ImageModel = { id: string; name: string; maker: string; recipe: string; license: string; description: string; url: string; files: ImageModelFile[] };
+type ImageModel = {
+  id: string;
+  name: string;
+  repo: string;
+  quant: string;
+  base: string;
+  family: string;
+  maker: string;
+  recipe: string;
+  license: string;
+  description: string;
+  /** whether the model edits an input image: always, optionally, or not at all */
+  edit: "required" | "optional" | null;
+  url: string;
+  files: ImageModelFile[];
+};
+type ImageDownload = { base: string; repo: string; path: string; quant: string; size: number };
 type SystemInfo = { modelsDir: string; freeBytes: number; usedBytes: number; totalMem: number };
 
 interface Window {
@@ -14,10 +30,11 @@ interface Window {
     onDiffusion(cb: (state: EngineState) => void): () => void;
     imageModels(): Promise<ImageModel[]>;
     onImageModels(cb: (list: ImageModel[]) => void): () => void;
-    downloadImageModel(id: string): Promise<void>;
+    downloadImageModel(spec: ImageDownload | string): Promise<void>;
     pauseImageModel(id: string): Promise<void>;
     deleteImageModel(id: string): Promise<void>;
     saveImage(id: string, b64: string): Promise<void>;
+    readImage(id: string): Promise<string>;
     deleteImage(id: string): Promise<void>;
     revealImage(id: string): Promise<void>;
     info(): Promise<SystemInfo>;
