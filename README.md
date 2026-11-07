@@ -55,6 +55,7 @@ The `.dmg` isn't code-signed. The first time you open it, macOS will block it: r
 3. Click a model to see where you can download it from: the official publisher and the trusted quantizers (ggml-org, unsloth, bartowski, lmstudio-community). Each source has a quantization picker with exact file sizes, defaulting to a 4-bit file.
 4. Click **Download**. Progress appears there and in **Text → Downloaded**, where you can pause, resume or delete.
 5. Start a new chat (⌘N) and pick the model in the header. It loads into memory on the first message.
+6. Models marked **Vision** or **Audio** can read attachments. With one selected, click the paperclip in the message box, paste an image, or drop a file on it. Images are sent as PNG; audio can be MP3, WAV or FLAC. Attachments are saved in `~/Library/Application Support/Photon/attachments` and deleted with their chat.
 
 To generate images:
 

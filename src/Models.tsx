@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { ConfirmButton } from "./ConfirmButton";
 import { FAMILIES, defaultQuant, estimateQ4, familyVariants, topVariants, fits, formatBytes, formatCount, formatParams, listQuants, searchVariants, type Family, type Quant, type Source, type Variant } from "./catalog";
-import { deleteModel, downloadModel, modelLabel, pauseDownload, sumProgress, type LocalModel, type Progress } from "./llm";
+import { deleteModel, downloadModel, inputsOf, modelLabel, pauseDownload, sumProgress, type LocalModel, type Progress } from "./llm";
+
+const InputBadges = ({ inputs }: { inputs: string[] }) => (
+  <>
+    {inputs.includes("image") && <span className="badge" title="Can read images you attach">Vision</span>}
+    {inputs.includes("audio") && <span className="badge" title="Can listen to audio you attach">Audio</span>}
+  </>
+);
 import { isDownloaded, isDownloading, modelDone, modelError, modelSize } from "./diffusion";
 import { IMAGE_FAMILIES, extrasSize, imageFamilyVariants, listImageFiles, searchImageVariants, topImageVariants, type ImageBase, type ImageFamily, type ImageFile, type ImageResults } from "./imageCatalog";
 import { SidebarIcon, TrashIcon } from "./icons";
@@ -97,7 +104,9 @@ function Downloaded({ engine, models, progress, info, run, onDiscover }: TabProp
         return (
           <div key={m.id} className="row">
             <div className="row-main">
-              <div className="row-title">{modelLabel(m.id)}</div>
+              <div className="row-title">
+                {modelLabel(m.id)} <InputBadges inputs={inputsOf(m)} />
+              </div>
               <div className="muted small">{m.id.split(":")[0]}</div>
               {downloading && <ProgressBar {...p} />}
             </div>
@@ -407,7 +416,9 @@ function VariantList({ title, subtitle, load, onBack, ...props }: ListProps) {
           <div key={v.id} className="repo">
             <button className="row row-btn" onClick={() => toggle(v.id)} aria-expanded={open === v.id}>
               <div className="row-main">
-                <div className="row-title">{v.name}</div>
+                <div className="row-title">
+                  {v.name} <InputBadges inputs={v.inputs} />
+                </div>
                 <div className="muted small">{details.filter(Boolean).join(" · ")}</div>
               </div>
               {estimate > 0 && <span className="muted small" title="Estimated size at Q4_K_M">≈{formatBytes(estimate)}</span>}

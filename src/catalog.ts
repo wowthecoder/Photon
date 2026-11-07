@@ -30,10 +30,12 @@ export type Repo = {
   gguf?: { total?: number; context_length?: number };
 };
 export type Source = { repo: string; author: string; downloads: number; gated: false | string; kind: "official" | "trusted" | "community" };
-export type Variant = { id: string; name: string; org: string; params?: number; context?: number; downloads: number; sources: Source[] };
+// inputs: what the model reads besides text, from its Hugging Face pipeline tag
+export type Variant = { id: string; name: string; org: string; params?: number; context?: number; downloads: number; sources: Source[]; inputs: string[] };
 export type Quant = { tag: string; size: number };
 
-const CHAT = new Set([undefined, "text-generation", "image-text-to-text"]);
+const CHAT = new Set([undefined, "text-generation", "image-text-to-text", "audio-text-to-text", "any-to-any"]);
+const PIPELINE_INPUTS: Record<string, string[]> = { "image-text-to-text": ["image"], "audio-text-to-text": ["audio"], "any-to-any": ["image", "audio"] };
 export const RANK = { official: 0, trusted: 1, community: 2 };
 const OFFICIAL = new Set(FAMILIES.map((f) => f.org.toLowerCase()));
 const QUANT = /[-_.]((?:UD-)?(?:I?Q\d(?:_[A-Z0-9]+)*|BF16|F16|F32|MXFP4(?:_MOE)?))(?:-\d{5}-of-\d{5})?\.gguf$/i;
@@ -66,12 +68,13 @@ export function groupVariants(repos: Repo[], officialOrg?: string): Variant[] {
     const official = author.toLowerCase() === org.toLowerCase() && OFFICIAL.has(org.toLowerCase());
     const kind = QUANTIZERS.includes(author) ? "trusted" : official ? "official" : "community";
     if (officialOrg && (org.toLowerCase() !== officialOrg.toLowerCase() || kind === "community")) continue;
-    const v = variants.get(id) ?? { id, name, org, downloads: 0, sources: [] };
+    const v = variants.get(id) ?? { id, name, org, downloads: 0, sources: [], inputs: [] };
     if (v.sources.some((s) => s.repo === r.id)) continue;
     v.sources.push({ repo: r.id, author, downloads: r.downloads, gated: r.gated, kind });
     v.downloads += r.downloads;
     v.params ??= r.gguf?.total;
     v.context ??= r.gguf?.context_length;
+    for (const input of PIPELINE_INPUTS[r.pipeline_tag ?? ""] ?? []) if (!v.inputs.includes(input)) v.inputs.push(input);
     variants.set(id, v);
   }
   for (const v of variants.values()) v.sources.sort((a, b) => RANK[a.kind] - RANK[b.kind] || b.downloads - a.downloads);

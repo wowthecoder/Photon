@@ -5,8 +5,8 @@ import { Images } from "./Images";
 import { Models, type ModelKind, type ModelTab } from "./Models";
 import { Settings } from "./Settings";
 import { Sidebar } from "./Sidebar";
-import { isReady, streamChat } from "./llm";
-import { usePersistent, type Chat as ChatT, type Message, type Settings as SettingsT, type View } from "./store";
+import { inputsOf, isReady, streamChat } from "./llm";
+import { usePersistent, type Attachment, type Chat as ChatT, type Message, type Settings as SettingsT, type View } from "./store";
 import { useEngine } from "./useEngine";
 
 const DEFAULT_SETTINGS: SettingsT = { model: "", systemPrompt: "", temperature: 0.7, theme: "system" };
@@ -50,9 +50,9 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  async function send(text: string) {
-    const chat = { ...(active ?? { id: crypto.randomUUID(), title: text.slice(0, 48), messages: [] }), model };
-    const history: Message[] = [...chat.messages, { id: crypto.randomUUID(), role: "user", content: text }];
+  async function send(text: string, attachments: Attachment[] = []) {
+    const chat = { ...(active ?? { id: crypto.randomUUID(), title: (text || attachments[0]?.label || "New chat").slice(0, 48), messages: [] }), model };
+    const history: Message[] = [...chat.messages, { id: crypto.randomUUID(), role: "user", content: text, ...(attachments.length ? { attachments } : {}) }];
     const replyId = crypto.randomUUID();
     setChats((cs) => [{ ...chat, messages: [...history, { id: replyId, role: "assistant", content: "" }] }, ...cs.filter((c) => c.id !== chat.id)]);
     setActiveId(chat.id);
@@ -69,7 +69,7 @@ export function App() {
     try {
       // free the image model first: a chat model and an image model may not both fit in memory
       if (diffusion.status === "ready") await unloadImageModel(diffusion).catch(() => {});
-      for await (const t of streamChat(engine, history, chat.model, settings, ctrl.signal)) append(t.content, t.reasoning);
+      for await (const t of streamChat(engine, history, chat.model, settings, ctrl.signal, inputsOf(ready.find((m) => m.id === chat.model)))) append(t.content, t.reasoning);
     } catch (e) {
       if (!ctrl.signal.aborted) append(`\n\n**Error:** ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -79,6 +79,8 @@ export function App() {
   }
 
   function remove(id: string) {
+    const names = chats.find((c) => c.id === id)?.messages.flatMap((m) => m.attachments?.map((a) => a.name) ?? []) ?? [];
+    if (names.length) window.photon?.deleteAttachments(names);
     setChats((cs) => cs.filter((c) => c.id !== id));
     if (id === activeId) setActiveId(null);
   }

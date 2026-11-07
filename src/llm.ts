@@ -1,11 +1,18 @@
+import { attachmentPart } from "./attachments";
 import type { Message, Settings } from "./store";
 
 export type ModelStatus = "downloading" | "incomplete" | "unloaded" | "loading" | "loaded" | "sleeping";
-export type LocalModel = { id: string; status: { value: ModelStatus; progress?: Record<string, Progress> } };
+export type LocalModel = {
+  id: string;
+  status: { value: ModelStatus; progress?: Record<string, Progress> };
+  // what the model can read besides text, e.g. ["text", "image", "audio"]; older servers omit it
+  architecture?: { input_modalities?: string[] };
+};
 export type Progress = { done: number; total: number };
 export type ModelEvent = { model: string; event: string; data?: { progress?: Record<string, Progress>; status?: string } };
 
 export const isReady = (m: LocalModel) => !["downloading", "incomplete"].includes(m.status.value);
+export const inputsOf = (m: LocalModel | undefined) => m?.architecture?.input_modalities ?? ["text"];
 
 export const sumProgress = (files: Record<string, Progress> = {}) =>
   Object.values(files).reduce((a, f) => ({ done: a.done + f.done, total: a.total + f.total }), { done: 0, total: 0 });
@@ -57,14 +64,17 @@ export async function watchModels(engine: EngineState, onEvent: (e: ModelEvent) 
   for await (const data of sse(res)) onEvent(JSON.parse(data));
 }
 
-export async function* streamChat(engine: EngineState, messages: Message[], model: string, settings: Settings, signal: AbortSignal) {
+// Attachments the model can't read are left out (e.g. after switching a chat to a text-only model).
+async function toApiMessage({ role, content, attachments = [] }: Message, inputs: string[]) {
+  const usable = attachments.filter((a) => inputs.includes(a.kind));
+  if (!usable.length) return { role, content };
+  return { role, content: [...(content ? [{ type: "text", text: content }] : []), ...(await Promise.all(usable.map(attachmentPart)))] };
+}
+
+export async function* streamChat(engine: EngineState, messages: Message[], model: string, settings: Settings, signal: AbortSignal, inputs: string[] = ["text"]) {
   const system = settings.systemPrompt.trim() ? [{ role: "system", content: settings.systemPrompt }] : [];
-  const res = await post(
-    engine,
-    "/v1/chat/completions",
-    { model, stream: true, temperature: settings.temperature, messages: [...system, ...messages.map(({ role, content }) => ({ role, content }))] },
-    signal,
-  );
+  const history = await Promise.all(messages.map((m) => toApiMessage(m, inputs)));
+  const res = await post(engine, "/v1/chat/completions", { model, stream: true, temperature: settings.temperature, messages: [...system, ...history] }, signal);
   for await (const data of sse(res)) {
     if (data === "[DONE]") return;
     const delta = JSON.parse(data).choices?.[0]?.delta;

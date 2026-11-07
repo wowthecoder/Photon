@@ -342,3 +342,16 @@ button { background: none; border: 0; cursor: pointer; }
 .input-image { display: flex; align-items: center; gap: 10px; }
 .input-image img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; background: var(--surface); }
 .input-image label.secondary-btn { cursor: pointer; }
+
+.composer { flex-wrap: wrap; }
+.composer-note { width: min(760px, calc(100% - 48px)); margin: 0 auto 6px; color: var(--warn); font-size: 12px; }
+.attach-btn { flex-shrink: 0; cursor: pointer; }
+.pending { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
+.pending-item { position: relative; display: flex; align-items: center; border-radius: 10px; background: var(--surface); }
+.pending-item.image img { display: block; width: 64px; height: 64px; object-fit: cover; border-radius: 10px; }
+.pending-item.audio { height: 36px; max-width: 240px; padding: 0 28px 0 10px; }
+.pending-item.audio span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.pending-remove { position: absolute; top: -6px; right: -6px; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--text); color: var(--bg); font-size: 13px; line-height: 1; }
+.message-attachments { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.message-image { display: block; max-width: 240px; max-height: 240px; border-radius: 12px; }
+.message-audio { display: grid; gap: 4px; }

@@ -43,7 +43,14 @@ function imageFile(id) {
   if (typeof id !== "string" || !/^[\w-]+$/.test(id)) throw new Error("Invalid image id");
   return path.join(imagesDir(), `${id}.png`);
 }
-protocol.registerSchemesAsPrivileged([{ scheme: "photon-image", privileges: { standard: true, secure: true } }]);
+// Chat attachments (images as PNG, audio as MP3/WAV/FLAC) are files too, served as photon-image://attachment/<id>.<ext>
+const attachmentsDir = () => path.join(app.getPath("userData"), "attachments");
+function attachmentFile(name) {
+  if (typeof name !== "string" || !/^[\w-]+\.(png|mp3|wav|flac)$/.test(name)) throw new Error("Invalid attachment");
+  return path.join(attachmentsDir(), name);
+}
+// stream: lets <audio> seek in attachments
+protocol.registerSchemesAsPrivileged([{ scheme: "photon-image", privileges: { standard: true, secure: true, stream: true } }]);
 const openExternal = (url) => /^https?:/.test(url) && shell.openExternal(url);
 
 function dirSize(dir) {
@@ -102,6 +109,15 @@ ipcMain.handle("images:save", (_, id, b64) => {
 ipcMain.handle("images:read", (_, id) => fs.readFileSync(imageFile(id)).toString("base64"));
 ipcMain.handle("images:delete", (_, id) => fs.rmSync(imageFile(id), { force: true }));
 ipcMain.handle("images:reveal", (_, id) => shell.showItemInFolder(imageFile(id)));
+ipcMain.handle("attachments:save", (_, name, b64) => {
+  const file = attachmentFile(name);
+  fs.mkdirSync(attachmentsDir(), { recursive: true });
+  fs.writeFileSync(file, Buffer.from(b64, "base64"));
+});
+ipcMain.handle("attachments:read", (_, name) => fs.readFileSync(attachmentFile(name)).toString("base64"));
+ipcMain.handle("attachments:delete", (_, names) => {
+  for (const name of Array.isArray(names) ? names : []) fs.rmSync(attachmentFile(name), { force: true });
+});
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -124,7 +140,12 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  protocol.handle("photon-image", (req) => net.fetch(pathToFileURL(imageFile(path.basename(new URL(req.url).pathname, ".png"))).href));
+  protocol.handle("photon-image", (req) => {
+    const url = new URL(req.url);
+    const file = url.hostname === "attachment" ? attachmentFile(path.basename(url.pathname)) : imageFile(path.basename(url.pathname, ".png"));
+    // pass Range through so <audio> can seek
+    return net.fetch(pathToFileURL(file).href, { headers: req.headers });
+  });
   pruneModels();
   restart();
   createWindow();

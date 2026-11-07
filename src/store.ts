@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 
-export type Message = { id: string; role: "user" | "assistant"; content: string; reasoning?: string };
+// name is the stored file (<uuid>.<ext>); label is the original file name
+export type Attachment = { name: string; kind: "image" | "audio"; label: string };
+export type Message = { id: string; role: "user" | "assistant"; content: string; reasoning?: string; attachments?: Attachment[] };
 export type Chat = { id: string; title: string; model: string; messages: Message[] };
 export type View = "chat" | "models" | "images";
 export type Theme = "system" | "light" | "dark";

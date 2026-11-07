@@ -35,6 +35,9 @@ interface Window {
     deleteImageModel(id: string): Promise<void>;
     saveImage(id: string, b64: string): Promise<void>;
     readImage(id: string): Promise<string>;
+    saveAttachment(name: string, b64: string): Promise<void>;
+    readAttachment(name: string): Promise<string>;
+    deleteAttachments(names: string[]): Promise<void>;
     deleteImage(id: string): Promise<void>;
     revealImage(id: string): Promise<void>;
     info(): Promise<SystemInfo>;
