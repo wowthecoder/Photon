@@ -31,6 +31,16 @@ contextBridge.exposeInMainWorld("photon", {
   deleteAttachments: (names) => ipcRenderer.invoke("attachments:delete", names),
   deleteImage: (id) => ipcRenderer.invoke("images:delete", id),
   revealImage: (id) => ipcRenderer.invoke("images:reveal", id),
+  connectors: () => ipcRenderer.invoke("connectors:list"),
+  onConnectors: (cb) => {
+    const listener = (_, list) => cb(list);
+    ipcRenderer.on("connectors", listener);
+    return () => ipcRenderer.off("connectors", listener);
+  },
+  connect: (id, token) => ipcRenderer.invoke("connectors:connect", id, token),
+  disconnect: (id) => ipcRenderer.invoke("connectors:disconnect", id),
+  mcpTools: () => ipcRenderer.invoke("mcp:tools"),
+  mcpCall: (name, args) => ipcRenderer.invoke("mcp:call", name, args),
   info: () => ipcRenderer.invoke("info"),
   chooseModelsDir: () => ipcRenderer.invoke("models:choose-dir"),
   revealModelsDir: () => ipcRenderer.invoke("models:reveal"),

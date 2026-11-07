@@ -1,10 +1,11 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, shell } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createEngine } from "./engine.js";
 import { createImageModels } from "./imageModels.js";
+import { createMcp } from "./mcp.js";
 
 const configPath = () => path.join(app.getPath("userData"), "config.json");
 const readConfig = () => {
@@ -36,6 +37,17 @@ const restartSd = () =>
 const restart = () => (restartLlm(), restartSd());
 
 const imageModels = createImageModels(diffusionDir, broadcast("image-models"));
+
+// Connector tokens are kept in config.json, encrypted with the macOS keychain via safeStorage
+const mcp = createMcp(broadcast("connectors"));
+const savedTokens = () => readConfig().connectorTokens ?? {};
+const saveToken = (id, token) => {
+  const { [id]: _, ...rest } = savedTokens();
+  writeConfig({ connectorTokens: token ? { ...rest, [id]: safeStorage.encryptString(token).toString("base64") } : rest });
+};
+const connectSaved = () => {
+  for (const [id, b64] of Object.entries(savedTokens())) mcp.connect(id, safeStorage.decryptString(Buffer.from(b64, "base64"))).catch(() => {});
+};
 
 // Generated images live as PNGs in the app data folder and are served to the UI as photon-image://local/<id>.png
 const imagesDir = () => path.join(app.getPath("userData"), "images");
@@ -101,6 +113,14 @@ ipcMain.handle("image-models:list", imageModels.list);
 ipcMain.handle("image-models:download", (_, id) => imageModels.start(id));
 ipcMain.handle("image-models:pause", (_, id) => imageModels.pause(id));
 ipcMain.handle("image-models:delete", (_, id) => imageModels.remove(id));
+ipcMain.handle("connectors:list", mcp.list);
+ipcMain.handle("connectors:connect", async (_, id, token) => {
+  if (typeof token !== "string" || !token.trim()) throw new Error("Enter a token");
+  if (await mcp.connect(id, token.trim())) saveToken(id, token.trim());
+});
+ipcMain.handle("connectors:disconnect", (_, id) => (mcp.disconnect(id), saveToken(id, null)));
+ipcMain.handle("mcp:tools", mcp.tools);
+ipcMain.handle("mcp:call", (_, name, args) => mcp.call(String(name), args && typeof args === "object" ? args : {}));
 ipcMain.handle("images:save", (_, id, b64) => {
   const file = imageFile(id);
   fs.mkdirSync(imagesDir(), { recursive: true });
@@ -148,6 +168,7 @@ app.whenReady().then(() => {
   });
   pruneModels();
   restart();
+  connectSaved();
   createWindow();
 });
 app.on("activate", () => BrowserWindow.getAllWindows().length === 0 && createWindow());

@@ -6,8 +6,20 @@ import { Models, type ModelKind, type ModelTab } from "./Models";
 import { Settings } from "./Settings";
 import { Sidebar } from "./Sidebar";
 import { inputsOf, isReady, streamChat } from "./llm";
-import { usePersistent, type Attachment, type Chat as ChatT, type Message, type Settings as SettingsT, type View } from "./store";
+import { usePersistent, type Attachment, type Chat as ChatT, type Message, type Approval, type Settings as SettingsT, type ToolCall, type View } from "./store";
 import { useEngine } from "./useEngine";
+
+// after this many tool rounds the model has to answer without tools
+const MAX_TOOL_ROUNDS = 8;
+
+const parseArgs = (args: string) => {
+  try {
+    const parsed = JSON.parse(args || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
 
 const DEFAULT_SETTINGS: SettingsT = { model: "", systemPrompt: "", temperature: 0.7, theme: "system" };
 
@@ -22,6 +34,7 @@ export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [streaming, setStreaming] = useState(false);
+  const [approval, setApproval] = useState<Approval | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const { engine, models, progress, info, refresh, diffusion, imageModels } = useEngine();
   const ready = models.filter(isReady);
@@ -53,25 +66,55 @@ export function App() {
   async function send(text: string, attachments: Attachment[] = []) {
     const chat = { ...(active ?? { id: crypto.randomUUID(), title: (text || attachments[0]?.label || "New chat").slice(0, 48), messages: [] }), model };
     const history: Message[] = [...chat.messages, { id: crypto.randomUUID(), role: "user", content: text, ...(attachments.length ? { attachments } : {}) }];
-    const replyId = crypto.randomUUID();
-    setChats((cs) => [{ ...chat, messages: [...history, { id: replyId, role: "assistant", content: "" }] }, ...cs.filter((c) => c.id !== chat.id)]);
+    setChats((cs) => [{ ...chat, messages: history }, ...cs.filter((c) => c.id !== chat.id)]);
     setActiveId(chat.id);
 
-    const append = (content: string, reasoning = "") =>
-      update(chat.id, (c) => ({
-        ...c,
-        messages: c.messages.map((m) => (m.id === replyId ? { ...m, content: m.content + content, reasoning: (m.reasoning ?? "") + reasoning || undefined } : m)),
-      }));
-
+    const patch = (id: string, fn: (m: Message) => Message) => update(chat.id, (c) => ({ ...c, messages: c.messages.map((m) => (m.id === id ? fn(m) : m)) }));
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setStreaming(true);
+    const ask = (call: ToolCall) =>
+      new Promise<boolean>((resolve) => {
+        const done = (ok: boolean) => (setApproval(null), resolve(ok));
+        ctrl.signal.addEventListener("abort", () => done(false), { once: true });
+        setApproval({ chatId: chat.id, call, resolve: done });
+      });
+
+    let reply: Message = { id: crypto.randomUUID(), role: "assistant", content: "" };
     try {
       // free the image model first: a chat model and an image model may not both fit in memory
       if (diffusion.status === "ready") await unloadImageModel(diffusion).catch(() => {});
-      for await (const t of streamChat(engine, history, chat.model, settings, ctrl.signal, inputsOf(ready.find((m) => m.id === chat.model)))) append(t.content, t.reasoning);
+      const tools = (await window.photon?.mcpTools().catch(() => [])) ?? [];
+      for (let round = 0; ; round++) {
+        reply = { id: crypto.randomUUID(), role: "assistant", content: "" };
+        update(chat.id, (c) => ({ ...c, messages: [...c.messages, reply] }));
+        let calls: ToolCall[] = [];
+        for await (const t of streamChat(engine, history, chat.model, settings, ctrl.signal, inputsOf(ready.find((m) => m.id === chat.model)), round < MAX_TOOL_ROUNDS ? tools : [])) {
+          if (t.toolCalls) {
+            calls = t.toolCalls;
+            continue;
+          }
+          reply = { ...reply, content: reply.content + t.content, reasoning: (reply.reasoning ?? "") + t.reasoning || undefined };
+          const { content, reasoning } = reply;
+          patch(reply.id, (m) => ({ ...m, content, reasoning }));
+        }
+        if (!calls.length) break;
+        for (const call of calls) {
+          const tool = tools.find((t) => t.name === call.name);
+          reply = { ...reply, toolCalls: [...(reply.toolCalls ?? []), call] };
+          const { toolCalls } = reply;
+          patch(reply.id, (m) => ({ ...m, toolCalls }));
+          const ok = !!tool && (tool.readOnly || (await ask(call)));
+          if (ctrl.signal.aborted) throw new Error("Stopped");
+          const result = !tool ? `Error: there is no tool called ${call.name}.` : ok ? await window.photon!.mcpCall(call.name, parseArgs(call.args)) : "The user declined to run this tool.";
+          reply = { ...reply, toolCalls: reply.toolCalls!.map((c) => (c.id === call.id ? { ...c, result } : c)) };
+          const done = reply.toolCalls;
+          patch(reply.id, (m) => ({ ...m, toolCalls: done }));
+        }
+        history.push(reply);
+      }
     } catch (e) {
-      if (!ctrl.signal.aborted) append(`\n\n**Error:** ${e instanceof Error ? e.message : String(e)}`);
+      if (!ctrl.signal.aborted) patch(reply.id, (m) => ({ ...m, content: m.content + `\n\n**Error:** ${e instanceof Error ? e.message : String(e)}` }));
     } finally {
       setStreaming(false);
       abortRef.current = null;
@@ -134,6 +177,7 @@ export function App() {
           models={ready}
           engine={engine}
           streaming={streaming}
+          approval={approval?.chatId === active?.id ? approval : null}
           sidebarOpen={sidebarOpen}
           onModelChange={(model) => (active ? update(active.id, (c) => ({ ...c, model })) : setSettings({ ...settings, model }))}
           onSend={send}

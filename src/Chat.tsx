@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
-import type { Attachment, Chat as ChatT } from "./store";
+import type { Approval, Attachment, Chat as ChatT, ToolCall } from "./store";
 import { inputsOf, modelLabel, type LocalModel } from "./llm";
 import { AUDIO_ACCEPT, attachmentUrl, saveAttachment } from "./attachments";
 import { AttachIcon, NewChatIcon, SendIcon, SidebarIcon, StopIcon } from "./icons";
@@ -11,6 +11,7 @@ type Props = {
   models: LocalModel[];
   engine: EngineState;
   streaming: boolean;
+  approval: Approval | null;
   sidebarOpen: boolean;
   onModelChange: (model: string) => void;
   onSend: (text: string, attachments: Attachment[]) => void;
@@ -20,7 +21,7 @@ type Props = {
   onOpenModels: () => void;
 };
 
-export function Chat({ chat, model, models, engine, streaming, sidebarOpen, onModelChange, onSend, onStop, onNew, onExpand, onOpenModels }: Props) {
+export function Chat({ chat, model, models, engine, streaming, approval, sidebarOpen, onModelChange, onSend, onStop, onNew, onExpand, onOpenModels }: Props) {
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<Attachment[]>([]);
   const [attachError, setAttachError] = useState("");
@@ -102,7 +103,7 @@ export function Chat({ chat, model, models, engine, streaming, sidebarOpen, onMo
             )}
           </div>
         ) : (
-          messages.map((m) => (
+          messages.map((m, i) => (
             <div key={m.id} className={`message ${m.role}`}>
               {m.reasoning && (
                 <details className="reasoning" open={!m.content}>
@@ -115,13 +116,24 @@ export function Chat({ chat, model, models, engine, streaming, sidebarOpen, onMo
                   {m.attachments.map((a) => <AttachmentView key={a.name} attachment={a} />)}
                 </div>
               )}
-              {m.role === "user" ? m.content : m.content ? <Markdown>{m.content}</Markdown> : !m.reasoning && <span className="typing">●●●</span>}
+              {m.role === "user" ? m.content : m.content ? <Markdown>{m.content}</Markdown> : !m.reasoning && !m.toolCalls && (streaming && i === messages.length - 1 ? <span className="typing">●●●</span> : <span className="muted small">No response</span>)}
+              {m.toolCalls?.map((c) => <ToolCallView key={c.id} call={c} waiting={approval?.call.id === c.id} streaming={streaming} />)}
             </div>
           ))
         )}
         <div ref={endRef} />
       </div>
 
+      {approval && (
+        <div className="approval">
+          <div>Run <code>{approval.call.name}</code>? It may change data in your account.</div>
+          <pre>{prettyArgs(approval.call.args)}</pre>
+          <div className="approval-actions">
+            <button className="secondary-btn" onClick={() => approval.resolve(false)}>Don't allow</button>
+            <button className="primary-btn" onClick={() => approval.resolve(true)} autoFocus>Allow</button>
+          </div>
+        </div>
+      )}
       {(attachError || unreadable.length > 0) && (
         <p className="composer-note">{attachError || `${modelLabel(model)} can't read ${unreadable[0].kind === "image" ? "images" : "audio"}, so the attachment won't be sent.`}</p>
       )}
@@ -186,5 +198,25 @@ function AttachmentView({ attachment }: { attachment: Attachment }) {
       <span className="small muted">{attachment.label}</span>
       <audio controls src={attachmentUrl(attachment)} />
     </div>
+  );
+}
+
+const prettyArgs = (args: string) => {
+  try {
+    return JSON.stringify(JSON.parse(args || "{}"), null, 2);
+  } catch {
+    return args;
+  }
+};
+
+function ToolCallView({ call, waiting, streaming }: { call: ToolCall; waiting: boolean; streaming: boolean }) {
+  return (
+    <details className="tool-call">
+      <summary>
+        {waiting ? "Waiting to run" : call.result !== undefined ? "Used" : streaming ? "Running" : "Didn't run"} <code>{call.name}</code>
+      </summary>
+      <pre>{prettyArgs(call.args)}</pre>
+      {call.result !== undefined && <pre>{call.result}</pre>}
+    </details>
   );
 }

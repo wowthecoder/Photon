@@ -42,7 +42,7 @@ node scripts/fetch-sd.js
 | `npm start` | Builds the UI and runs it in Electron without the dev server. |
 | `npm run dist` | Packages `release/Photon-<version>-arm64.dmg`, with llama.cpp and sd-server bundled. |
 | `npm run web` | Runs only the UI at http://localhost:1420 in a browser. The model engine isn't available there. |
-| `npm test` | Runs the catalog checks (quantization names, grouping, default quant) the image catalog checks (grouping by base model) and the downloader checks (resume, size mismatch). |
+| `npm test` | Runs the catalog checks (quantization names, grouping, default quant) the image catalog checks (grouping by base model) the downloader checks (resume, size mismatch) and the connector checks (against a stub MCP server). |
 
 Hot reload covers everything in `src/`. If you change anything in `electron/`, stop `npm run dev` and start it again.
 
@@ -56,6 +56,12 @@ The `.dmg` isn't code-signed. The first time you open it, macOS will block it: r
 4. Click **Download**. Progress appears there and in **Text → Downloaded**, where you can pause, resume or delete.
 5. Start a new chat (⌘N) and pick the model in the header. It loads into memory on the first message.
 6. Models marked **Vision** or **Audio** can read attachments. With one selected, click the paperclip in the message box, paste an image, or drop a file on it. Images are sent as PNG; audio can be MP3, WAV or FLAC. Attachments are saved in `~/Library/Application Support/Photon/attachments` and deleted with their chat.
+
+To let a model use your GitHub account:
+
+1. Create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new) for the repositories you want Photon to use.
+2. Open **Settings → Connectors**, paste it next to **GitHub** and click **Connect**. Photon talks to GitHub's MCP server (`api.githubcopilot.com/mcp`) from the main process and keeps the token in `config.json`, encrypted with the macOS keychain.
+3. Chat with a model that supports tool calling (Qwen3, gpt-oss, Llama 3.2 and others). Tools that only read run straight away; Photon asks before running anything else. After 8 rounds of tool calls the model has to answer without them.
 
 To generate images:
 

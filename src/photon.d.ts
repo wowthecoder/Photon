@@ -20,6 +20,9 @@ type ImageModel = {
 type ImageDownload = { base: string; repo: string; path: string; quant: string; size: number };
 type SystemInfo = { modelsDir: string; freeBytes: number; usedBytes: number; totalMem: number };
 
+type Connector = { id: string; name: string; tokenUrl: string; status: "off" | "connecting" | "on" | "error"; error?: string; toolCount: number };
+type McpTool = { name: string; description: string; parameters: object; readOnly: boolean };
+
 interface Window {
   photon?: {
     engine(): Promise<EngineState>;
@@ -40,6 +43,12 @@ interface Window {
     deleteAttachments(names: string[]): Promise<void>;
     deleteImage(id: string): Promise<void>;
     revealImage(id: string): Promise<void>;
+    connectors(): Promise<Connector[]>;
+    onConnectors(cb: (list: Connector[]) => void): () => void;
+    connect(id: string, token: string): Promise<void>;
+    disconnect(id: string): Promise<void>;
+    mcpTools(): Promise<McpTool[]>;
+    mcpCall(name: string, args: object): Promise<string>;
     info(): Promise<SystemInfo>;
     chooseModelsDir(): Promise<boolean>;
     revealModelsDir(): Promise<void>;

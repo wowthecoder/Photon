@@ -1,5 +1,5 @@
 import { attachmentPart } from "./attachments";
-import type { Message, Settings } from "./store";
+import type { Message, Settings, ToolCall } from "./store";
 
 export type ModelStatus = "downloading" | "incomplete" | "unloaded" | "loading" | "loaded" | "sleeping";
 export type LocalModel = {
@@ -65,19 +65,37 @@ export async function watchModels(engine: EngineState, onEvent: (e: ModelEvent) 
 }
 
 // Attachments the model can't read are left out (e.g. after switching a chat to a text-only model).
-async function toApiMessage({ role, content, attachments = [] }: Message, inputs: string[]) {
+// An assistant turn that called tools becomes the assistant message plus one "tool" message per result.
+async function toApiMessages({ role, content, attachments = [], toolCalls }: Message, inputs: string[]): Promise<object[]> {
+  if (toolCalls?.length)
+    return [
+      { role, content, tool_calls: toolCalls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.args } })) },
+      ...toolCalls.map((c) => ({ role: "tool", tool_call_id: c.id, content: c.result ?? "The tool didn't run." })),
+    ];
   const usable = attachments.filter((a) => inputs.includes(a.kind));
-  if (!usable.length) return { role, content };
-  return { role, content: [...(content ? [{ type: "text", text: content }] : []), ...(await Promise.all(usable.map(attachmentPart)))] };
+  if (!usable.length) return [{ role, content }];
+  return [{ role, content: [...(content ? [{ type: "text", text: content }] : []), ...(await Promise.all(usable.map(attachmentPart)))] }];
 }
 
-export async function* streamChat(engine: EngineState, messages: Message[], model: string, settings: Settings, signal: AbortSignal, inputs: string[] = ["text"]) {
+type Chunk = { content: string; reasoning: string; toolCalls?: undefined } | { toolCalls: ToolCall[] };
+
+// Streams one model turn. If the model calls tools, the last chunk carries the calls.
+export async function* streamChat(engine: EngineState, messages: Message[], model: string, settings: Settings, signal: AbortSignal, inputs: string[] = ["text"], tools: McpTool[] = []): AsyncGenerator<Chunk> {
   const system = settings.systemPrompt.trim() ? [{ role: "system", content: settings.systemPrompt }] : [];
-  const history = await Promise.all(messages.map((m) => toApiMessage(m, inputs)));
-  const res = await post(engine, "/v1/chat/completions", { model, stream: true, temperature: settings.temperature, messages: [...system, ...history] }, signal);
+  const history = (await Promise.all(messages.map((m) => toApiMessages(m, inputs)))).flat();
+  const body = { model, stream: true, temperature: settings.temperature, messages: [...system, ...history] };
+  const res = await post(engine, "/v1/chat/completions", tools.length ? { ...body, tools: tools.map(({ name, description, parameters }) => ({ type: "function", function: { name, description, parameters } })) } : body, signal);
+  const calls: ToolCall[] = [];
   for await (const data of sse(res)) {
-    if (data === "[DONE]") return;
+    if (data === "[DONE]") break;
     const delta = JSON.parse(data).choices?.[0]?.delta;
     if (delta?.content || delta?.reasoning_content) yield { content: delta.content ?? "", reasoning: delta.reasoning_content ?? "" };
+    // tool calls arrive in pieces: the first piece of each has its id and name, the rest add to its arguments
+    for (const t of delta?.tool_calls ?? []) {
+      const c = (calls[t.index ?? 0] ??= { id: t.id ?? crypto.randomUUID(), name: "", args: "" });
+      c.name += t.function?.name ?? "";
+      c.args += t.function?.arguments ?? "";
+    }
   }
+  if (calls.length) yield { toolCalls: calls.filter(Boolean) };
 }
