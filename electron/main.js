@@ -38,16 +38,33 @@ const restart = () => (restartLlm(), restartSd());
 
 const imageModels = createImageModels(diffusionDir, broadcast("image-models"));
 
-// Connector tokens are kept in config.json, encrypted with the macOS keychain via safeStorage
-const mcp = createMcp(broadcast("connectors"));
-const savedTokens = () => readConfig().connectorTokens ?? {};
-const saveToken = (id, token) => {
-  const { [id]: _, ...rest } = savedTokens();
-  writeConfig({ connectorTokens: token ? { ...rest, [id]: safeStorage.encryptString(token).toString("base64") } : rest });
+// Connector sign-ins ({ tokens, client }) are kept in config.json, encrypted with the macOS keychain via safeStorage.
+// oauth-clients.json (not in git) holds the OAuth apps Photon signs in with, e.g. { "github": { "client_id", "client_secret" } }.
+const readJson = (file) => {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return undefined;
+  }
 };
-const connectSaved = () => {
-  for (const [id, b64] of Object.entries(savedTokens())) mcp.connect(id, safeStorage.decryptString(Buffer.from(b64, "base64"))).catch(() => {});
+const connectorStore = {
+  get: (id) => {
+    const b64 = readConfig().connectors?.[id];
+    return b64 ? JSON.parse(safeStorage.decryptString(Buffer.from(b64, "base64"))) : undefined;
+  },
+  set: (id, data) => {
+    const { [id]: _, ...rest } = readConfig().connectors ?? {};
+    // connectorTokens held personal access tokens before OAuth; drop them
+    writeConfig({ connectorTokens: undefined, connectors: data ? { ...rest, [id]: safeStorage.encryptString(JSON.stringify(data)).toString("base64") } : rest });
+  },
 };
+const mcp = createMcp({
+  onChange: broadcast("connectors"),
+  store: connectorStore,
+  clients: readJson(path.join(import.meta.dirname, "oauth-clients.json")) ?? {},
+  openUrl: (url) => shell.openExternal(url),
+  onSignedIn: () => (app.focus({ steal: true }), BrowserWindow.getAllWindows()[0]?.show()),
+});
 
 // Generated images live as PNGs in the app data folder and are served to the UI as photon-image://local/<id>.png
 const imagesDir = () => path.join(app.getPath("userData"), "images");
@@ -114,11 +131,8 @@ ipcMain.handle("image-models:download", (_, id) => imageModels.start(id));
 ipcMain.handle("image-models:pause", (_, id) => imageModels.pause(id));
 ipcMain.handle("image-models:delete", (_, id) => imageModels.remove(id));
 ipcMain.handle("connectors:list", mcp.list);
-ipcMain.handle("connectors:connect", async (_, id, token) => {
-  if (typeof token !== "string" || !token.trim()) throw new Error("Enter a token");
-  if (await mcp.connect(id, token.trim())) saveToken(id, token.trim());
-});
-ipcMain.handle("connectors:disconnect", (_, id) => (mcp.disconnect(id), saveToken(id, null)));
+ipcMain.handle("connectors:connect", (_, id) => mcp.connect(id));
+ipcMain.handle("connectors:disconnect", (_, id) => mcp.disconnect(id));
 ipcMain.handle("mcp:tools", mcp.tools);
 ipcMain.handle("mcp:call", (_, name, args) => mcp.call(String(name), args && typeof args === "object" ? args : {}));
 ipcMain.handle("images:save", (_, id, b64) => {
@@ -168,7 +182,7 @@ app.whenReady().then(() => {
   });
   pruneModels();
   restart();
-  connectSaved();
+  for (const { id } of mcp.list()) mcp.resume(id).catch(() => {});
   createWindow();
 });
 app.on("activate", () => BrowserWindow.getAllWindows().length === 0 && createWindow());

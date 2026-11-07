@@ -1,6 +1,6 @@
 import type { Chat, View } from "./store";
 import { ConfirmButton } from "./ConfirmButton";
-import { ImageIcon, ModelsIcon, NewChatIcon, SettingsIcon, SidebarIcon, TrashIcon } from "./icons";
+import { ConnectorsIcon, ImageIcon, ModelsIcon, NewChatIcon, SettingsIcon, SidebarIcon, TrashIcon } from "./icons";
 
 type Props = {
   chats: Chat[];
@@ -11,11 +11,12 @@ type Props = {
   onDelete: (id: string) => void;
   onModels: () => void;
   onImages: () => void;
+  onConnectors: () => void;
   onSettings: () => void;
   onCollapse: () => void;
 };
 
-export function Sidebar({ chats, activeId, view, onSelect, onNew, onDelete, onModels, onImages, onSettings, onCollapse }: Props) {
+export function Sidebar({ chats, activeId, view, onSelect, onNew, onDelete, onModels, onImages, onConnectors, onSettings, onCollapse }: Props) {
   return (
     <aside className="sidebar">
       <div className="titlebar">
@@ -27,6 +28,9 @@ export function Sidebar({ chats, activeId, view, onSelect, onNew, onDelete, onMo
       </button>
       <button className={`nav-item ${view === "models" ? "active" : ""}`} onClick={onModels}>
         <ModelsIcon /> Models
+      </button>
+      <button className={`nav-item ${view === "connectors" ? "active" : ""}`} onClick={onConnectors}>
+        <ConnectorsIcon /> Connectors
       </button>
       <nav className="chat-list">
         {chats.length === 0 && <p className="muted">No chats yet</p>}

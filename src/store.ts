@@ -8,7 +8,7 @@ export type Message = { id: string; role: "user" | "assistant"; content: string;
 // a tool call waiting for the user to allow it
 export type Approval = { chatId: string; call: ToolCall; resolve: (ok: boolean) => void };
 export type Chat = { id: string; title: string; model: string; messages: Message[] };
-export type View = "chat" | "models" | "images";
+export type View = "chat" | "models" | "images" | "connectors";
 export type Theme = "system" | "light" | "dark";
 export type Settings = { model: string; systemPrompt: string; temperature: number; theme: Theme };
 

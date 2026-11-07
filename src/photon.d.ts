@@ -20,7 +20,8 @@ type ImageModel = {
 type ImageDownload = { base: string; repo: string; path: string; quant: string; size: number };
 type SystemInfo = { modelsDir: string; freeBytes: number; usedBytes: number; totalMem: number };
 
-type Connector = { id: string; name: string; tokenUrl: string; status: "off" | "connecting" | "on" | "error"; error?: string; toolCount: number };
+// setUp: false when the connector needs an OAuth app that oauth-clients.json doesn't have
+type Connector = { id: string; name: string; description: string; status: "off" | "connecting" | "on" | "error"; error?: string; toolCount: number; setUp: boolean };
 type McpTool = { name: string; description: string; parameters: object; readOnly: boolean };
 
 interface Window {
@@ -45,7 +46,7 @@ interface Window {
     revealImage(id: string): Promise<void>;
     connectors(): Promise<Connector[]>;
     onConnectors(cb: (list: Connector[]) => void): () => void;
-    connect(id: string, token: string): Promise<void>;
+    connect(id: string): Promise<void>;
     disconnect(id: string): Promise<void>;
     mcpTools(): Promise<McpTool[]>;
     mcpCall(name: string, args: object): Promise<string>;

@@ -37,7 +37,7 @@ contextBridge.exposeInMainWorld("photon", {
     ipcRenderer.on("connectors", listener);
     return () => ipcRenderer.off("connectors", listener);
   },
-  connect: (id, token) => ipcRenderer.invoke("connectors:connect", id, token),
+  connect: (id) => ipcRenderer.invoke("connectors:connect", id),
   disconnect: (id) => ipcRenderer.invoke("connectors:disconnect", id),
   mcpTools: () => ipcRenderer.invoke("mcp:tools"),
   mcpCall: (name, args) => ipcRenderer.invoke("mcp:call", name, args),

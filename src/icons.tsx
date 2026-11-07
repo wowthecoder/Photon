@@ -13,3 +13,4 @@ export const StopIcon = icon("M7 7h10v10H7z");
 export const ImageIcon = icon("M4 5h16v14H4zM4 16l4.5-4.5 4 4 2.5-2.5 5 5M15.5 9.5h.01");
 export const AttachIcon = icon("M21 11.5 12.5 20a5 5 0 0 1-7-7L14 4.5a3.3 3.3 0 0 1 4.7 4.7L10.2 17.7a1.7 1.7 0 0 1-2.4-2.4L15.5 7.6");
 export const ModelsIcon = icon("M12 3 4 7.5v9L12 21l8-4.5v-9ZM4 7.5l8 4.5 8-4.5M12 12v9");
+export const ConnectorsIcon = icon("M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0ZM12 16v5");

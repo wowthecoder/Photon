@@ -3,3 +3,4 @@ dist
 release
 resources/llama
 resources/sd
+electron/oauth-clients.json

@@ -59,9 +59,11 @@ The `.dmg` isn't code-signed. The first time you open it, macOS will block it: r
 
 To let a model use your GitHub account:
 
-1. Create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new) for the repositories you want Photon to use.
-2. Open **Settings → Connectors**, paste it next to **GitHub** and click **Connect**. Photon talks to GitHub's MCP server (`api.githubcopilot.com/mcp`) from the main process and keeps the token in `config.json`, encrypted with the macOS keychain.
+1. Open **Connectors** in the sidebar and click **Connect** next to **GitHub**.
+2. Your browser opens GitHub's authorization page. Approve Photon and you're sent back to the app.
 3. Chat with a model that supports tool calling (Qwen3, gpt-oss, Llama 3.2 and others). Tools that only read run straight away; Photon asks before running anything else. After 8 rounds of tool calls the model has to answer without them.
+
+Photon talks to GitHub's MCP server (`api.githubcopilot.com/mcp`) from the main process. The sign-in is kept in `config.json`, encrypted with the macOS keychain. **Disconnect** forgets it; to revoke Photon's access completely, also remove it under GitHub → Settings → Applications → Authorized OAuth Apps.
 
 To generate images:
 
@@ -71,6 +73,16 @@ To generate images:
 4. Click an image to see its prompt and seed, reuse them, edit it, show it in Finder or delete it.
 
 Models are stored in `~/Library/Application Support/Photon/models` by default. To use a different folder, go to **Settings → Models folder → Change…**. Changing the folder doesn't move models you've already downloaded.
+
+## Connectors setup
+
+GitHub doesn't let apps register themselves for OAuth, so Photon signs in with an OAuth app you register once:
+
+1. Go to https://github.com/settings/applications/new.
+2. Set **Homepage URL** to anything (e.g. your repo) and **Authorization callback URL** to `http://127.0.0.1/callback`. GitHub accepts any port for a `127.0.0.1` callback, so Photon can pick a free one each time.
+3. Create the app, then click **Generate a new client secret**.
+4. Copy `electron/oauth-clients.example.json` to `electron/oauth-clients.json` and fill in the client ID and secret. The file is git-ignored but packaged into the app, like `gh` and other desktop apps do: a desktop app can't keep a client secret secret, and PKCE protects the sign-in instead.
+5. Restart `npm run dev`.
 
 ## How it works
 

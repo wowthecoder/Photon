@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Chat } from "./Chat";
+import { Connectors } from "./Connectors";
 import { unloadImageModel, type GeneratedImage } from "./diffusion";
 import { Images } from "./Images";
 import { Models, type ModelKind, type ModelTab } from "./Models";
@@ -140,6 +141,7 @@ export function App() {
           onDelete={remove}
           onModels={() => openModels()}
           onImages={() => setView("images")}
+          onConnectors={() => setView("connectors")}
           onSettings={() => setSettingsOpen(true)}
           onCollapse={() => setSidebarOpen(false)}
         />
@@ -156,7 +158,9 @@ export function App() {
         onExpand={() => setSidebarOpen(true)}
         onOpenModels={() => openModels("image", "discover")}
       />
-      {view === "images" ? null : view === "models" ? (
+      {view === "images" ? null : view === "connectors" ? (
+        <Connectors sidebarOpen={sidebarOpen} onExpand={() => setSidebarOpen(true)} />
+      ) : view === "models" ? (
         <Models
           engine={engine}
           models={models}
