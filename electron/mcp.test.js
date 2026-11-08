@@ -44,7 +44,9 @@ const server = http.createServer(async (req, res) => {
   await transport.handleRequest(req, res);
 });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
-const connectors = [{ id: "stub", name: "Stub", description: "", url: `http://127.0.0.1:${server.address().port}/mcp`, scope: "repo read:user", oauthApp: "stubApp" }];
+const connectors = [{ id: "stub", name: "Stub", description: "", url: `http://127.0.0.1:${server.address().port}/mcp`, scope: "repo read:user", oauthApp: "stubApp", authParams: { access_type: "offline" } }];
+// a fixed callback port, like a Google "Web application" client needs
+const callbackPort = await new Promise((r) => { const s = http.createServer().listen(0, "127.0.0.1", () => { const { port } = s.address(); s.close(() => r(port)); }); });
 
 // the "browser": follows the authorize redirect back to Photon's loopback callback
 let browserOpened = 0;
@@ -56,7 +58,7 @@ const openUrl = async (url) => {
 const saved = new Map();
 const store = { get: (id) => saved.get(id), set: (id, data) => (data ? saved.set(id, data) : saved.delete(id)) };
 let signedIn = 0;
-const make = (opts = {}) => createMcp({ onChange: () => {}, store, clients: { stubApp: { client_id: "app", client_secret: "shh" } }, openUrl, onSignedIn: () => signedIn++, connectors, ...opts });
+const make = (opts = {}) => createMcp({ onChange: () => {}, store, clients: { stubApp: { client_id: "app", client_secret: "shh", redirectPort: callbackPort } }, openUrl, onSignedIn: () => signedIn++, connectors, ...opts });
 
 // no OAuth app configured
 const unset = make({ clients: {} });
@@ -71,6 +73,8 @@ assert.equal(mcp.list()[0].status, "on", mcp.list()[0].error);
 assert.equal(signedIn, 1);
 assert.equal(authorizeRequests[0].scope, "repo read:user");
 assert.equal(authorizeRequests[0].code_challenge_method, "S256");
+assert.equal(authorizeRequests[0].access_type, "offline");
+assert.equal(new URL(authorizeRequests[0].redirect_uri).port, String(callbackPort));
 assert.equal(saved.get("stub").tokens.access_token, "good");
 assert.deepEqual(mcp.tools().map((t) => [t.name, t.readOnly]), [["stub_shout", true], ["stub_create_issue", false]]);
 assert.equal(await mcp.call("stub_shout", { text: "hi" }), "HI");
@@ -95,6 +99,14 @@ await mcp.connect("stub");
 assert.equal(mcp.list()[0].status, "error");
 assert.match(mcp.list()[0].error, /access_denied/);
 deny = false;
+
+// something else holds the callback port
+const squatter = http.createServer().listen(callbackPort, "127.0.0.1");
+await new Promise((r) => squatter.once("listening", r));
+const busy = make();
+await busy.connect("stub");
+assert.match(busy.list()[0].error, /Port \d+ is in use/);
+squatter.close();
 
 // the user cancels while the browser is open
 const waiting = make({ openUrl: () => {} });

@@ -6,5 +6,23 @@
     "url": "https://api.githubcopilot.com/mcp/",
     "scope": "repo read:org read:user",
     "oauthApp": "github"
+  },
+  {
+    "id": "gmail",
+    "name": "Gmail",
+    "description": "Search, read and draft email",
+    "url": "https://gmailmcp.googleapis.com/mcp/v1",
+    "scope": "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose",
+    "oauthApp": "google",
+    "authParams": { "access_type": "offline", "prompt": "consent" }
+  },
+  {
+    "id": "drive",
+    "name": "Google Drive",
+    "description": "Find and read Docs, Sheets and Slides",
+    "url": "https://drivemcp.googleapis.com/mcp/v1",
+    "scope": "https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file",
+    "oauthApp": "google",
+    "authParams": { "access_type": "offline", "prompt": "consent" }
   }
 ]

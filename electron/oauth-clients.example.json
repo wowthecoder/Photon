@@ -1,4 +1,4 @@
 {
   "github": { "client_id": "Ov23li...", "client_secret": "..." },
-  "google": { "client_id": "....apps.googleusercontent.com", "client_secret": "GOCSPX-..." }
+  "google": { "client_id": "....apps.googleusercontent.com", "client_secret": "GOCSPX-...", "redirectPort": 53682 }
 }

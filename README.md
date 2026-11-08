@@ -57,13 +57,13 @@ The `.dmg` isn't code-signed. The first time you open it, macOS will block it: r
 5. Start a new chat (⌘N) and pick the model in the header. It loads into memory on the first message.
 6. Models marked **Vision** or **Audio** can read attachments. With one selected, click the paperclip in the message box, paste an image, or drop a file on it. Images are sent as PNG; audio can be MP3, WAV or FLAC. Attachments are saved in `~/Library/Application Support/Photon/attachments` and deleted with their chat.
 
-To let a model use your GitHub account:
+To let a model use your GitHub, Gmail or Google Drive account:
 
-1. Open **Connectors** in the sidebar and click **Connect** next to **GitHub**.
-2. Your browser opens GitHub's authorization page. Approve Photon and you're sent back to the app.
+1. Open **Connectors** in the sidebar and click **+** next to it. (Each needs an OAuth app first; see [Connectors setup](#connectors-setup).)
+2. Your browser opens the provider's sign-in page. Approve Photon and you're sent back to the app.
 3. Chat with a model that supports tool calling (Qwen3, gpt-oss, Llama 3.2 and others). Tools that only read run straight away; Photon asks before running anything else. After 8 rounds of tool calls the model has to answer without them.
 
-Photon talks to GitHub's MCP server (`api.githubcopilot.com/mcp`) from the main process. The sign-in is kept in `config.json`, encrypted with the macOS keychain. **Disconnect** forgets it; to revoke Photon's access completely, also remove it under GitHub → Settings → Applications → Authorized OAuth Apps.
+Photon talks to each provider's MCP server from the main process. Sign-ins are kept in `config.json`, encrypted with the macOS keychain. Clicking the check on a connected card forgets the sign-in; to revoke Photon's access completely, also remove it in your account (GitHub → Settings → Applications, or https://myaccount.google.com/connections).
 
 To generate images:
 
@@ -76,13 +76,26 @@ Models are stored in `~/Library/Application Support/Photon/models` by default. T
 
 ## Connectors setup
 
-GitHub doesn't let apps register themselves for OAuth, so Photon signs in with an OAuth app you register once:
+GitHub and Google don't let apps register themselves for OAuth, so Photon signs in with OAuth apps you register once. Their client IDs and secrets go in `electron/oauth-clients.json` (copy `electron/oauth-clients.example.json`). The file is git-ignored but packaged into the app, as `gh` and other desktop apps do: a desktop app can't keep a client secret secret, and PKCE protects the sign-in instead. Restart `npm run dev` after changing it.
+
+### GitHub
 
 1. Go to https://github.com/settings/applications/new.
 2. Set **Homepage URL** to anything (e.g. your repo) and **Authorization callback URL** to `http://127.0.0.1/callback`. GitHub accepts any port for a `127.0.0.1` callback, so Photon can pick a free one each time.
-3. Create the app, then click **Generate a new client secret**.
-4. Copy `electron/oauth-clients.example.json` to `electron/oauth-clients.json` and fill in the client ID and secret. The file is git-ignored but packaged into the app, like `gh` and other desktop apps do: a desktop app can't keep a client secret secret, and PKCE protects the sign-in instead.
-5. Restart `npm run dev`.
+3. Create the app, click **Generate a new client secret**, and put both values under `"github"`.
+
+### Google (Gmail and Google Drive)
+
+Google's MCP servers are in developer preview, so this needs a Google Cloud project and membership in the [Google Workspace Developer Preview Program](https://developers.google.com/workspace/preview).
+
+1. Enable the APIs and their MCP servers in your project:
+   ```bash
+   gcloud services enable gmail.googleapis.com drive.googleapis.com gmailmcp.googleapis.com drivemcp.googleapis.com --project=PROJECT_ID
+   ```
+2. In **Google Auth Platform → Branding**, set up the consent screen. While the app is in **Testing**, add yourself under **Audience → Test users**. Google shows an "unverified app" warning, and sign-ins expire after 7 days until the app is published.
+3. In **Google Auth Platform → Data access**, add the scopes `gmail.readonly`, `gmail.compose`, `drive.readonly` and `drive.file`.
+4. In **Google Auth Platform → Clients**, create a client of type **Web application**, tick **Use this client for an AI-powered agent**, and add the redirect URI `http://127.0.0.1:53682/callback`.
+5. Put its client ID and secret under `"google"`, with `"redirectPort": 53682`. Web application clients need the exact callback URL, so Photon always listens on that port for Google. Gmail and Drive share this client, but each is signed in separately.
 
 ### Adding a connector
 
@@ -103,7 +116,8 @@ A connector is a remote MCP server that signs in with OAuth. To add one:
    - `scope` is what Photon asks for at sign-in. Leave it out and Photon asks for everything the server lists.
    - `oauthApp` is the key of its OAuth app in `electron/oauth-clients.json`. Several connectors can share one, e.g. Gmail and Google Drive both use `google`. Leave it out if the server supports dynamic client registration (Notion, Linear and others), and Photon registers itself.
 2. Add its logo as `src/connector-icons/<id>.svg`. Without one, the card shows the first letter of its name.
-3. If it has an `oauthApp`, register that app with the provider with `http://127.0.0.1/callback` as the redirect URL and add its client ID and secret to `electron/oauth-clients.json`. For Google, create an OAuth client of type **Desktop app** in Google Cloud Console.
+3. If it has an `oauthApp`, register that app with the provider and add its client ID and secret to `electron/oauth-clients.json` (see above). If the provider needs an exact redirect URL, register `http://127.0.0.1:<port>/callback` and set `"redirectPort"` in that entry.
+4. If the provider needs extra sign-in URL parameters, put them in `authParams`. Google, for example, only gives a refresh token with `"access_type": "offline"`.
 
 ## How it works
 
