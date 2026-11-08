@@ -44,7 +44,7 @@ const server = http.createServer(async (req, res) => {
   await transport.handleRequest(req, res);
 });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
-const connectors = [{ id: "stub", name: "Stub", description: "", url: `http://127.0.0.1:${server.address().port}/mcp`, scope: "repo read:user", needsClient: true }];
+const connectors = [{ id: "stub", name: "Stub", description: "", url: `http://127.0.0.1:${server.address().port}/mcp`, scope: "repo read:user", oauthApp: "stubApp" }];
 
 // the "browser": follows the authorize redirect back to Photon's loopback callback
 let browserOpened = 0;
@@ -56,7 +56,7 @@ const openUrl = async (url) => {
 const saved = new Map();
 const store = { get: (id) => saved.get(id), set: (id, data) => (data ? saved.set(id, data) : saved.delete(id)) };
 let signedIn = 0;
-const make = (opts = {}) => createMcp({ onChange: () => {}, store, clients: { stub: { client_id: "app", client_secret: "shh" } }, openUrl, onSignedIn: () => signedIn++, connectors, ...opts });
+const make = (opts = {}) => createMcp({ onChange: () => {}, store, clients: { stubApp: { client_id: "app", client_secret: "shh" } }, openUrl, onSignedIn: () => signedIn++, connectors, ...opts });
 
 // no OAuth app configured
 const unset = make({ clients: {} });

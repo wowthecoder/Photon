@@ -1,3 +1,4 @@
 {
-  "github": { "client_id": "Ov23li...", "client_secret": "..." }
+  "github": { "client_id": "Ov23li...", "client_secret": "..." },
+  "google": { "client_id": "....apps.googleusercontent.com", "client_secret": "GOCSPX-..." }
 }

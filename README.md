@@ -84,6 +84,27 @@ GitHub doesn't let apps register themselves for OAuth, so Photon signs in with a
 4. Copy `electron/oauth-clients.example.json` to `electron/oauth-clients.json` and fill in the client ID and secret. The file is git-ignored but packaged into the app, like `gh` and other desktop apps do: a desktop app can't keep a client secret secret, and PKCE protects the sign-in instead.
 5. Restart `npm run dev`.
 
+### Adding a connector
+
+A connector is a remote MCP server that signs in with OAuth. To add one:
+
+1. Add an entry to `electron/connectors.json`:
+   ```json
+   {
+     "id": "gmail",
+     "name": "Gmail",
+     "description": "Search, read and draft email",
+     "url": "https://gmailmcp.googleapis.com/mcp/v1",
+     "scope": "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose",
+     "oauthApp": "google"
+   }
+   ```
+   - `id` names its tools for the model (`gmail_<tool>`), so use letters only; no underscores.
+   - `scope` is what Photon asks for at sign-in. Leave it out and Photon asks for everything the server lists.
+   - `oauthApp` is the key of its OAuth app in `electron/oauth-clients.json`. Several connectors can share one, e.g. Gmail and Google Drive both use `google`. Leave it out if the server supports dynamic client registration (Notion, Linear and others), and Photon registers itself.
+2. Add its logo as `src/connector-icons/<id>.svg`. Without one, the card shows the first letter of its name.
+3. If it has an `oauthApp`, register that app with the provider with `http://127.0.0.1/callback` as the redirect URL and add its client ID and secret to `electron/oauth-clients.json`. For Google, create an OAuth client of type **Desktop app** in Google Cloud Console.
+
 ## How it works
 
 ```

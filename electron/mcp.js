@@ -3,19 +3,11 @@ import http from "node:http";
 import { auth } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import CONNECTORS from "./connectors.json" with { type: "json" };
 
-// client: the OAuth app Photon signs in with. GitHub has no dynamic client registration, so it needs one;
-// a connector whose server supports registration can leave it out and Photon registers itself.
-export const CONNECTORS = [
-  {
-    id: "github",
-    name: "GitHub",
-    description: "Repositories, issues and pull requests",
-    url: "https://api.githubcopilot.com/mcp/",
-    scope: "repo read:org read:user",
-    needsClient: true,
-  },
-];
+// The connectors Photon offers. Each entry: id, name, description, url (a remote MCP server), scope (what to ask for at sign-in),
+// and oauthApp: the key in oauth-clients.json for servers without dynamic client registration (GitHub, Google).
+// Leave oauthApp out and Photon registers itself with the server. Icons live in src/connector-icons/<id>.svg.
 
 const SIGN_IN_TIMEOUT = 5 * 60_000;
 const DONE_PAGE = `<!doctype html><meta charset="utf-8"><title>Photon</title><body style="font:15px -apple-system,sans-serif;text-align:center;padding-top:20vh">`;
@@ -50,15 +42,15 @@ async function loopback(state) {
 // One MCP client per connected connector, signed in with OAuth.
 // The model sees each tool as <connector id>_<tool name>.
 // store.get(id) / store.set(id, data | null) keep { tokens, client } between launches.
-// clients[id] is a pre-registered OAuth app { client_id, client_secret } for connectors that need one.
+// clients[oauthApp] is a pre-registered OAuth app { client_id, client_secret }; connectors can share one (e.g. Gmail and Drive).
 // openUrl(url) opens the system browser; onSignedIn(id) brings Photon back to the front.
 export function createMcp({ onChange, store, clients = {}, openUrl, onSignedIn = () => {}, connectors = CONNECTORS }) {
   const live = new Map(); // id -> { status, error?, client?, tools?, cancel? }
 
   const list = () =>
-    connectors.map(({ id, name, description, needsClient }) => {
+    connectors.map(({ id, name, description, oauthApp }) => {
       const s = live.get(id);
-      return { id, name, description, status: s?.status ?? "off", error: s?.error, toolCount: s?.tools?.length ?? 0, setUp: !needsClient || !!clients[id] };
+      return { id, name, description, status: s?.status ?? "off", error: s?.error, toolCount: s?.tools?.length ?? 0, setUp: !oauthApp || !!clients[oauthApp] };
     });
   const set = (id, s) => (s ? live.set(id, s) : live.delete(id), onChange(list()));
   const fail = (id, e) => set(id, { status: "error", error: message(e) });
@@ -67,11 +59,12 @@ export function createMcp({ onChange, store, clients = {}, openUrl, onSignedIn =
   // Without a redirectUrl the SDK assumes a machine-to-machine client, so background connections get a placeholder.
   function provider(def, { redirectUrl = "http://127.0.0.1/callback", state, interactive }) {
     let verifier;
+    const app = def.oauthApp && clients[def.oauthApp];
     const saved = () => store.get(def.id) ?? {};
     return {
       redirectUrl,
-      clientMetadata: { client_name: "Photon", redirect_uris: [redirectUrl], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: clients[def.id] ? "client_secret_post" : "none", scope: def.scope },
-      clientInformation: () => (clients[def.id] ? { ...clients[def.id], token_endpoint_auth_method: "client_secret_post" } : saved().client),
+      clientMetadata: { client_name: "Photon", redirect_uris: [redirectUrl], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: app ? "client_secret_post" : "none", scope: def.scope },
+      clientInformation: () => (app ? { ...app, token_endpoint_auth_method: "client_secret_post" } : saved().client),
       saveClientInformation: (client) => store.set(def.id, { ...saved(), client }),
       tokens: () => saved().tokens,
       saveTokens: (tokens) => store.set(def.id, { ...saved(), tokens }),
@@ -124,7 +117,7 @@ export function createMcp({ onChange, store, clients = {}, openUrl, onSignedIn =
   // Opens the browser to sign in, waits for the user to approve, then connects.
   async function connect(id) {
     const def = find(id);
-    if (def.needsClient && !clients[id]) return fail(id, `${def.name} needs an OAuth app. See "Connectors" in the README.`);
+    if (def.oauthApp && !clients[def.oauthApp]) return fail(id, `${def.name} needs an OAuth app. See "Connectors setup" in the README.`);
     disconnect(id);
     const state = randomBytes(16).toString("hex");
     const { redirectUrl, code, close } = await loopback(state);

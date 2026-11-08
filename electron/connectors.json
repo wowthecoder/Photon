@@ -1,0 +1,10 @@
+[
+  {
+    "id": "github",
+    "name": "GitHub",
+    "description": "Triage issues, pull requests and repositories",
+    "url": "https://api.githubcopilot.com/mcp/",
+    "scope": "repo read:org read:user",
+    "oauthApp": "github"
+  }
+]
