@@ -42,7 +42,7 @@ node scripts/fetch-sd.js
 | `npm start` | Builds the UI and runs it in Electron without the dev server. |
 | `npm run dist` | Packages `release/Photon-<version>-arm64.dmg`, with llama.cpp and sd-server bundled. |
 | `npm run web` | Runs only the UI at http://localhost:1420 in a browser. The model engine isn't available there. |
-| `npm test` | Runs the catalog checks (quantization names, grouping, default quant) the image catalog checks (grouping by base model) the downloader checks (resume, size mismatch) and the connector checks (against a stub MCP server). |
+| `npm test` | Runs the catalog checks (quantization names, grouping, default quant) the image catalog checks (grouping by base model) the downloader checks (resume, size mismatch) the connector checks (against a stub MCP server) and the shell tool checks (output, timeout, Stop). |
 
 Hot reload covers everything in `src/`. If you change anything in `electron/`, stop `npm run dev` and start it again.
 
@@ -61,9 +61,11 @@ To let a model use your GitHub, Gmail or Google Drive account:
 
 1. Open **Connectors** in the sidebar and click **+** next to it. (Each needs an OAuth app first; see [Connectors setup](#connectors-setup).)
 2. Your browser opens the provider's sign-in page. Approve Photon and you're sent back to the app.
-3. Chat with a model that supports tool calling (Qwen3, gpt-oss, Llama 3.2 and others). Tools that only read run straight away; Photon asks before running anything else. After 8 rounds of tool calls the model has to answer without them.
+3. Chat with a model that supports tool calling (Qwen3, gpt-oss, Llama 3.2 and others). Tools that only read run straight away; Photon asks before running anything else. After 20 rounds of tool calls the model has to answer without them.
 
 Photon talks to each provider's MCP server from the main process. Sign-ins are kept in `config.json`, encrypted with the macOS keychain. Clicking the check on a connected card forgets the sign-in; to revoke Photon's access completely, also remove it in your account (GitHub → Settings → Applications, or https://myaccount.google.com/connections).
+
+Models that support tool calling can also run shell commands on your Mac with the `bash` tool. Photon shows each command and asks before running it. Commands run with zsh as a login shell (so your PATH from `~/.zprofile` applies), start in `~/Library/Application Support/Photon/workspace`, can't read input, and are stopped after 2 minutes or when you click Stop, along with anything they started. The model gets the first 2,000 and last 6,000 characters of the output. Turn it off in **Settings → Let models run shell commands**.
 
 To generate images:
 
@@ -163,6 +165,7 @@ electron/main.js      Window, config.json, IPC handlers (folder picker, disk inf
 electron/engine.js    Starts, health-checks and stops a local server (llama-server, sd-server)
 electron/imageModels.js  Image model download status, download/pause/delete
 electron/imageFamilies.json  Supported image base models: recipe, text encoder and VAE
+electron/tools.js     Tools built into Photon: bash (tested by tools.test.js)
 electron/download.js  Resumable file download (tested by download.test.js)
 electron/preload.cjs  Exposes window.photon (engine state, folder actions) to the UI
 scripts/dev.js        Starts Vite, then Electron pointed at it

@@ -49,6 +49,13 @@ export function Settings({ open, settings, models, info, onChange, onClose }: Pr
           <span>Temperature <span className="muted">{settings.temperature.toFixed(1)}</span></span>
           <input type="range" min={0} max={2} step={0.1} value={settings.temperature} onChange={(e) => set("temperature", +e.target.value)} />
         </label>
+        <div className="field">
+          <label className="check">
+            <input type="checkbox" checked={settings.shell} onChange={(e) => set("shell", e.target.checked)} />
+            Let models run shell commands
+          </label>
+          <span className="muted small">Photon asks before running each one. Commands start in Photon's workspace folder but can reach your whole Mac.</span>
+        </div>
         <label>
           Appearance
           <select value={settings.theme} onChange={(e) => set("theme", e.target.value as Theme)}>

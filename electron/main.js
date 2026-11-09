@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { createEngine } from "./engine.js";
 import { createImageModels } from "./imageModels.js";
 import { createMcp } from "./mcp.js";
+import { createTools } from "./tools.js";
 
 const configPath = () => path.join(app.getPath("userData"), "config.json");
 const readConfig = () => {
@@ -65,6 +66,10 @@ const mcp = createMcp({
   openUrl: (url) => shell.openExternal(url),
   onSignedIn: () => (app.focus({ steal: true }), BrowserWindow.getAllWindows()[0]?.show()),
 });
+
+const builtins = createTools({ workspace: () => path.join(app.getPath("userData"), "workspace") });
+// Tool calls in progress, by tool call id, so Stop can cancel them
+const running = new Map();
 
 // Generated images live as PNGs in the app data folder and are served to the UI as photon-image://local/<id>.png
 const imagesDir = () => path.join(app.getPath("userData"), "images");
@@ -133,8 +138,18 @@ ipcMain.handle("image-models:delete", (_, id) => imageModels.remove(id));
 ipcMain.handle("connectors:list", mcp.list);
 ipcMain.handle("connectors:connect", (_, id) => mcp.connect(id));
 ipcMain.handle("connectors:disconnect", (_, id) => mcp.disconnect(id));
-ipcMain.handle("mcp:tools", mcp.tools);
-ipcMain.handle("mcp:call", (_, name, args) => mcp.call(String(name), args && typeof args === "object" ? args : {}));
+ipcMain.handle("tools:list", () => [...builtins.tools(), ...mcp.tools()]);
+ipcMain.handle("tools:call", async (_, name, args, id) => {
+  const ctrl = new AbortController();
+  running.set(id, ctrl);
+  try {
+    args = args && typeof args === "object" ? args : {};
+    return await (builtins.has(name) ? builtins.call(name, args, ctrl.signal) : mcp.call(String(name), args, ctrl.signal));
+  } finally {
+    running.delete(id);
+  }
+});
+ipcMain.handle("tools:cancel", (_, id) => running.get(id)?.abort());
 ipcMain.handle("images:save", (_, id, b64) => {
   const file = imageFile(id);
   fs.mkdirSync(imagesDir(), { recursive: true });

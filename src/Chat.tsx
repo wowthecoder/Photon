@@ -126,7 +126,7 @@ export function Chat({ chat, model, models, engine, streaming, approval, sidebar
 
       {approval && (
         <div className="approval">
-          <div>Run <code>{approval.call.name}</code>? It may change data in your account.</div>
+          <div>Run <code>{approval.call.name}</code>? {approval.warning ?? "It may change data in your account."}</div>
           <pre>{prettyArgs(approval.call.args)}</pre>
           <div className="approval-actions">
             <button className="secondary-btn" onClick={() => approval.resolve(false)}>Don't allow</button>
@@ -201,9 +201,12 @@ function AttachmentView({ attachment }: { attachment: Attachment }) {
   );
 }
 
+// a shell command shows as typed, not as escaped JSON, so it's easy to check before allowing it
 const prettyArgs = (args: string) => {
   try {
-    return JSON.stringify(JSON.parse(args || "{}"), null, 2);
+    const parsed = JSON.parse(args || "{}");
+    if (typeof parsed?.command === "string" && Object.keys(parsed).length === 1) return parsed.command;
+    return JSON.stringify(parsed, null, 2);
   } catch {
     return args;
   }

@@ -22,7 +22,9 @@ type SystemInfo = { modelsDir: string; freeBytes: number; usedBytes: number; tot
 
 // setUp: false when the connector needs an OAuth app that oauth-clients.json doesn't have
 type Connector = { id: string; name: string; description: string; status: "off" | "connecting" | "on" | "error"; error?: string; toolCount: number; setUp: boolean };
-type McpTool = { name: string; description: string; parameters: object; readOnly: boolean };
+// a tool the model can call: a connector's (<connector id>_<tool>) or one built into Photon (e.g. bash)
+// warning: what the approval prompt says the tool may do
+type McpTool = { name: string; description: string; parameters: object; readOnly: boolean; warning?: string };
 
 interface Window {
   photon?: {
@@ -48,8 +50,9 @@ interface Window {
     onConnectors(cb: (list: Connector[]) => void): () => void;
     connect(id: string): Promise<void>;
     disconnect(id: string): Promise<void>;
-    mcpTools(): Promise<McpTool[]>;
-    mcpCall(name: string, args: object): Promise<string>;
+    tools(): Promise<McpTool[]>;
+    callTool(name: string, args: object, id: string): Promise<string>;
+    cancelTool(id: string): Promise<void>;
     info(): Promise<SystemInfo>;
     chooseModelsDir(): Promise<boolean>;
     revealModelsDir(): Promise<void>;
