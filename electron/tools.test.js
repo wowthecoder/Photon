@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createTools, runBash } from "./tools.js";
+import { createSandbox, createTools, RUNTIMES, runBash } from "./tools.js";
 
 const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "photon-tools-"));
 const pidFile = path.join(cwd, "child.pid");
@@ -37,6 +37,32 @@ assert.equal(await runBash("echo started; sleep 30", { cwd, signal: ctrl.signal 
 const tools = createTools({ workspace: () => cwd });
 assert.match(await tools.call("bash", {}), /^Error: command must be/);
 assert.equal(await tools.call("bash", { command: "true" }), "(no output)\n[exit code 0]");
+
+// run_code, against a stand-in for docker that logs its arguments and runs "run" with the local python3
+const fake = path.join(cwd, "fake-docker");
+const log = path.join(cwd, "docker.log");
+fs.writeFileSync(fake, `#!/bin/sh\necho "$@" >> '${log}'\n[ "$1" = run ] && exec python3 -u -\nexit 0\n`, { mode: 0o755 });
+const docker = { ...RUNTIMES.find((r) => r.bin === "docker"), bin: fake, env: process.env };
+const sandbox = createSandbox({ workspace: () => cwd, findRuntime: async () => docker });
+assert.equal(await sandbox.runCode("print(6 * 7)\nopen('x.txt', 'w').write('kept')"), "42\n[exit code 0]");
+assert.match(await sandbox.runCode("print(open('x.txt').read()); 1/0"), /^kept\nTraceback[\s\S]*ZeroDivisionError[\s\S]*\[exit code 1\]$/);
+const calls = fs.readFileSync(log, "utf8").trim().split("\n");
+assert.deepEqual(calls.filter((c) => c.startsWith("image")), ["image pull python:3.14-slim"]); // pulled once
+const runArgs = calls.find((c) => c.startsWith("run "));
+assert.ok(runArgs.includes("--network none --quiet") && runArgs.includes(`-v ${cwd}:/work -w /work`), runArgs);
+
+// Stop removes the container by name
+const stop = new AbortController();
+setTimeout(() => stop.abort(), 500);
+assert.equal(await sandbox.runCode("import time\nprint('started')\ntime.sleep(30)", stop.signal), "started\n[Stopped by the user.]");
+await new Promise((r) => setTimeout(r, 300));
+const name = fs.readFileSync(log, "utf8").trim().split("\n").at(-2).match(/--name (\S+)/)[1];
+assert.equal(fs.readFileSync(log, "utf8").trim().split("\n").at(-1), `rm -f ${name}`);
+
+// without a runtime, run_code isn't offered
+const none = createTools({ workspace: () => cwd, findRuntime: async () => undefined });
+assert.deepEqual((await none.tools()).map((t) => t.name), ["bash"]);
+assert.deepEqual((await createTools({ workspace: () => cwd, findRuntime: async () => docker }).tools()).map((t) => t.name), ["bash", "run_code"]);
 
 fs.rmSync(cwd, { recursive: true, force: true });
 console.log("tools: ok");

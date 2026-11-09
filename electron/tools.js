@@ -1,19 +1,26 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
+import path from "node:path";
+import { promisify } from "node:util";
 
 // Tools built into Photon, offered to the model next to the connectors' tools.
 const TIMEOUT = 120_000;
+// the first run_code of a launch pulls the Python image (about 50 MB)
+const PULL_TIMEOUT = 600_000;
 // local models often have 8–32k tokens of context; one `ls -R` shouldn't fill it
 const HEAD = 2_000;
 const TAIL = 6_000;
+const IMAGE = "python:3.14-slim";
+const SANDBOX_NETWORK = "photon-sandbox";
 
-// Runs a command with zsh in a new process group, so a timeout or Stop also kills what it started.
-// -l loads the user's login PATH: apps opened from the Dock get a minimal one without Homebrew.
+// Runs a program in a new process group, so a timeout or Stop also kills what it started.
+// onKill cleans up what lives outside that group, e.g. a container. input is written to stdin; without it stdin is closed.
 // Output keeps its start and end (errors and summaries are usually at the end), ending with the exit code.
-export function runBash(command, { cwd, signal, timeout = TIMEOUT }) {
-  fs.mkdirSync(cwd, { recursive: true });
+export function run(file, args, { cwd, env, input, signal, timeout = TIMEOUT, onKill }) {
   return new Promise((resolve) => {
-    const child = spawn("/bin/zsh", ["-lc", command], { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(file, args, { cwd, env, detached: true, stdio: [input == null ? "ignore" : "pipe", "pipe", "pipe"] });
+    child.stdin?.on("error", () => {}).end(input);
     let head = "", tail = "", total = 0, why = "";
     const add = (s) => {
       total += s.length;
@@ -23,14 +30,17 @@ export function runBash(command, { cwd, signal, timeout = TIMEOUT }) {
     };
     for (const pipe of [child.stdout, child.stderr]) pipe.setEncoding("utf8").on("data", add);
     const kill = (reason) => {
-      why ||= reason;
+      if (why) return;
+      why = reason;
       try {
         process.kill(-child.pid, "SIGKILL");
       } catch {}
+      onKill?.();
     };
     const timer = setTimeout(() => kill(`Timed out after ${timeout / 1000} s.`), timeout);
     const onAbort = () => kill("Stopped by the user.");
     signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
     child.on("error", (e) => add(e.message));
     child.on("close", (code) => {
       clearTimeout(timer);
@@ -42,27 +52,99 @@ export function runBash(command, { cwd, signal, timeout = TIMEOUT }) {
   });
 }
 
-// workspace() is the folder commands start in.
-export function createTools({ workspace }) {
-  const defs = [
-    {
-      name: "bash",
-      description: `Runs a shell command with zsh on the user's Mac and returns its output (stdout and stderr together) and exit code. Each command runs in a new shell that starts in ${workspace()}, so cd doesn't carry over. Commands can't read input and are stopped after ${TIMEOUT / 1000} seconds.`,
-      parameters: { type: "object", properties: { command: { type: "string", description: "The command to run" } }, required: ["command"] },
-      readOnly: false,
-      warning: "It runs on your Mac with your permissions.",
-    },
-  ];
+// zsh -l loads the user's login PATH: apps opened from the Dock get a minimal one without Homebrew.
+export function runBash(command, { cwd, signal, timeout }) {
+  fs.mkdirSync(cwd, { recursive: true });
+  return run("/bin/zsh", ["-lc", command], { cwd, signal, timeout });
+}
 
-  const has = (name) => defs.some((d) => d.name === name);
+// The login shell's PATH, for finding and running Docker or Apple's container outside the shell.
+let loginPath;
+const getLoginPath = () => (loginPath ??= promisify(execFile)("/bin/zsh", ["-lc", 'printf %s "$PATH"']).then((r) => r.stdout, () => process.env.PATH ?? ""));
+
+// Apple's container first, then Docker (Docker Desktop, OrbStack, Colima).
+// flags: what run needs to cut the network off and keep progress lines out of the output.
+// setup runs once a launch. Apple's service doesn't start at login unless set up to, so Photon starts it
+// (a no-op when it's running; a fresh install also downloads its Linux kernel). Docker Desktop is an app; start it yourself.
+// Docker cuts the network off entirely. Apple's container has no "none" network; a host-only network without DNS
+// is the closest: the container can't reach the internet, but can reach services on the Mac that listen beyond 127.0.0.1.
+export const RUNTIMES = [
+  { bin: "container", flags: ["--network", SANDBOX_NETWORK, "--no-dns", "--progress", "none"], setup: [["system", "start", "--enable-kernel-install"], ["network", "create", "--internal", SANDBOX_NETWORK]] },
+  { bin: "docker", flags: ["--network", "none", "--quiet"], setup: [] },
+];
+
+async function findRuntime() {
+  const PATH = await getLoginPath();
+  const dirs = PATH.split(":");
+  const rt = RUNTIMES.find((r) => dirs.some((d) => fs.existsSync(path.join(d, r.bin))));
+  return rt && { ...rt, env: { ...process.env, PATH } };
+}
+
+// Runs Python in a throwaway container: no network, 1 GB of memory, 2 CPUs, and the workspace mounted at /work.
+// The first run of a launch sets up the runtime and pulls the image, so the pull doesn't count toward the run's timeout.
+// Setup failures are ignored: the network or image may already be there, and if not, the run says what's wrong.
+export function createSandbox({ workspace, findRuntime: find = findRuntime }) {
+  let ready;
+
+  async function prepare(rt, signal) {
+    ready ??= (async () => {
+      for (const args of [...rt.setup, ["image", "pull", IMAGE]]) await run(rt.bin, args, { env: rt.env, signal, timeout: PULL_TIMEOUT });
+    })();
+    await ready;
+    if (signal?.aborted) ready = undefined; // Stop during the pull: try again next time
+  }
+
+  async function runCode(code, signal) {
+    const rt = await find();
+    if (!rt) return "Error: run_code needs Docker or Apple's container, and neither is installed.";
+    const cwd = workspace();
+    fs.mkdirSync(cwd, { recursive: true });
+    await prepare(rt, signal);
+    if (signal?.aborted) return "(no output)\n[Stopped by the user.]";
+    const name = `photon-${randomUUID().slice(0, 8)}`;
+    // killing the CLI doesn't stop the container, so a timeout or Stop removes it by name
+    const onKill = () => spawn(rt.bin, ["rm", "-f", name], { env: rt.env, stdio: "ignore" }).on("error", () => {});
+    const args = ["run", "--rm", "-i", "--name", name, "--memory", "1G", "--cpus", "2", ...rt.flags, "-v", `${cwd}:/work`, "-w", "/work", IMAGE, "python", "-u", "-"];
+    const out = await run(rt.bin, args, { cwd, env: rt.env, input: code, signal, onKill });
+    // the kernel kills a container that runs out of memory without a word
+    return out.replace(/\[exit code 137\]$/, "[exit code 137: killed, probably for using more than 1 GB of memory]");
+  }
+
+  return { available: async () => !!(await find()), runCode };
+}
+
+// workspace() is the folder bash commands start in, mounted at /work for run_code.
+export function createTools({ workspace, findRuntime }) {
+  const sandbox = createSandbox({ workspace, findRuntime });
+  const bash = {
+    name: "bash",
+    description: `Runs a shell command with zsh on the user's Mac and returns its output (stdout and stderr together) and exit code. Each command runs in a new shell that starts in ${workspace()}, so cd doesn't carry over. Commands can't read input and are stopped after ${TIMEOUT / 1000} seconds.`,
+    parameters: { type: "object", properties: { command: { type: "string", description: "The command to run" } }, required: ["command"] },
+    readOnly: false,
+    warning: "It runs on your Mac with your permissions.",
+  };
+  const runCode = {
+    name: "run_code",
+    description: `Runs Python 3.14 code in an isolated Linux container and returns what it prints (stdout and stderr together) and the exit code. Use it for calculations, data processing and checking your reasoning. Print every result you need. Only the standard library is installed and there's no network access, so pip install won't work. Each run starts a new Python process, so variables don't carry over, but files written in the working folder /work do. Runs are stopped after ${TIMEOUT / 1000} seconds.`,
+    parameters: { type: "object", properties: { code: { type: "string", description: "The Python code to run" } }, required: ["code"] },
+    // readOnly means it runs without asking: it can only touch the workspace
+    readOnly: true,
+  };
+
+  const has = (name) => name === bash.name || name === runCode.name;
+  const tools = async () => [bash, ...((await sandbox.available()) ? [runCode] : [])];
 
   async function call(name, args, signal) {
     if (name === "bash") {
       if (typeof args.command !== "string" || !args.command.trim()) return "Error: command must be a non-empty string.";
       return runBash(args.command, { cwd: workspace(), signal });
     }
+    if (name === "run_code") {
+      if (typeof args.code !== "string" || !args.code.trim()) return "Error: code must be a non-empty string.";
+      return sandbox.runCode(args.code, signal);
+    }
     return `Error: there is no tool called ${name}.`;
   }
 
-  return { tools: () => defs, has, call };
+  return { tools, has, call };
 }

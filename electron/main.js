@@ -138,7 +138,7 @@ ipcMain.handle("image-models:delete", (_, id) => imageModels.remove(id));
 ipcMain.handle("connectors:list", mcp.list);
 ipcMain.handle("connectors:connect", (_, id) => mcp.connect(id));
 ipcMain.handle("connectors:disconnect", (_, id) => mcp.disconnect(id));
-ipcMain.handle("tools:list", () => [...builtins.tools(), ...mcp.tools()]);
+ipcMain.handle("tools:list", async () => [...(await builtins.tools()), ...mcp.tools()]);
 ipcMain.handle("tools:call", async (_, name, args, id) => {
   const ctrl = new AbortController();
   running.set(id, ctrl);

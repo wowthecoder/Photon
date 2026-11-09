@@ -201,11 +201,12 @@ function AttachmentView({ attachment }: { attachment: Attachment }) {
   );
 }
 
-// a shell command shows as typed, not as escaped JSON, so it's easy to check before allowing it
+// a shell command or Python code shows as typed, not as escaped JSON, so it's easy to read and check
 const prettyArgs = (args: string) => {
   try {
     const parsed = JSON.parse(args || "{}");
-    if (typeof parsed?.command === "string" && Object.keys(parsed).length === 1) return parsed.command;
+    const only = parsed && Object.keys(parsed).length === 1 ? (parsed.command ?? parsed.code) : undefined;
+    if (typeof only === "string") return only;
     return JSON.stringify(parsed, null, 2);
   } catch {
     return args;
