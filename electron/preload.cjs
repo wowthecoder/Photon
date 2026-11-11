@@ -42,6 +42,8 @@ contextBridge.exposeInMainWorld("photon", {
   tools: () => ipcRenderer.invoke("tools:list"),
   callTool: (name, args, id) => ipcRenderer.invoke("tools:call", name, args, id),
   cancelTool: (id) => ipcRenderer.invoke("tools:cancel", id),
+  searchUrl: () => ipcRenderer.invoke("search-url:get"),
+  setSearchUrl: (url) => ipcRenderer.invoke("search-url:set", url),
   info: () => ipcRenderer.invoke("info"),
   chooseModelsDir: () => ipcRenderer.invoke("models:choose-dir"),
   revealModelsDir: () => ipcRenderer.invoke("models:reveal"),

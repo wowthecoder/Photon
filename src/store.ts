@@ -12,7 +12,8 @@ export type Chat = { id: string; title: string; model: string; messages: Message
 export type View = "chat" | "models" | "images" | "connectors";
 export type Theme = "system" | "light" | "dark";
 // shell: whether the model may ask to run shell commands (the bash tool)
-export type Settings = { model: string; systemPrompt: string; temperature: number; theme: Theme; shell: boolean };
+// web: whether the model may search and read the web (web_search, web_fetch); off until the user turns it on
+export type Settings = { model: string; systemPrompt: string; temperature: number; theme: Theme; shell: boolean; web: boolean };
 
 // ponytail: rewrites the whole key on every change (incl. each streamed token); move chats to backend/SQLite when history grows
 export function usePersistent<T>(key: string, initial: T) {

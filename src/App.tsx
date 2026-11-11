@@ -23,6 +23,15 @@ const parseArgs = (args: string): object | null => {
   }
 };
 
+const WEB_TOOLS = ["web_search", "web_fetch"];
+
+// web_fetch runs without asking when its address is already in the chat: typed by the user or returned by a tool
+// (e.g. a search result). Otherwise a page could get the model to send what's in the chat to another site in an address.
+const inChat = (call: ToolCall, messages: Message[]) => {
+  const url = (parseArgs(call.args) as { url?: unknown } | null)?.url;
+  return typeof url === "string" && url.length > 0 && messages.some((m) => (m.role === "user" && m.content.includes(url)) || m.toolCalls?.some((c) => c.result?.includes(url)));
+};
+
 // runs a tool; Stop cancels it (bash kills its command)
 async function runTool(call: ToolCall, signal: AbortSignal) {
   const args = parseArgs(call.args);
@@ -36,7 +45,7 @@ async function runTool(call: ToolCall, signal: AbortSignal) {
   }
 }
 
-const DEFAULT_SETTINGS: SettingsT = { model: "", systemPrompt: "", temperature: 0.7, theme: "system", shell: true };
+const DEFAULT_SETTINGS: SettingsT = { model: "", systemPrompt: "", temperature: 0.7, theme: "system", shell: true, web: false };
 
 export function App() {
   const [chats, setChats] = usePersistent<ChatT[]>("chats", []);
@@ -99,7 +108,7 @@ export function App() {
     try {
       // free the image model first: a chat model and an image model may not both fit in memory
       if (diffusion.status === "ready") await unloadImageModel(diffusion).catch(() => {});
-      const tools = ((await window.photon?.tools().catch(() => [])) ?? []).filter((t) => settings.shell || t.name !== "bash");
+      const tools = ((await window.photon?.tools().catch(() => [])) ?? []).filter((t) => (settings.shell || t.name !== "bash") && (settings.web || !WEB_TOOLS.includes(t.name)));
       for (let round = 0; ; round++) {
         reply = { id: crypto.randomUUID(), role: "assistant", content: "" };
         update(chat.id, (c) => ({ ...c, messages: [...c.messages, reply] }));
@@ -119,7 +128,7 @@ export function App() {
           reply = { ...reply, toolCalls: [...(reply.toolCalls ?? []), call] };
           const { toolCalls } = reply;
           patch(reply.id, (m) => ({ ...m, toolCalls }));
-          const ok = !!tool && (tool.readOnly || (await ask(call, tool.warning)));
+          const ok = !!tool && (tool.readOnly || (call.name === "web_fetch" && inChat(call, [...history, reply])) || (await ask(call, tool.warning)));
           if (ctrl.signal.aborted) throw new Error("Stopped");
           const result = !tool ? `Error: there is no tool called ${call.name}.` : ok ? await runTool(call, ctrl.signal) : "The user declined to run this tool.";
           reply = { ...reply, toolCalls: reply.toolCalls!.map((c) => (c.id === call.id ? { ...c, result } : c)) };

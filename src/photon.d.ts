@@ -53,6 +53,10 @@ interface Window {
     tools(): Promise<McpTool[]>;
     callTool(name: string, args: object, id: string): Promise<string>;
     cancelTool(id: string): Promise<void>;
+    /** the SearXNG address web_search uses; "" when there's none */
+    searchUrl(): Promise<string>;
+    /** an empty address removes it */
+    setSearchUrl(url: string): Promise<void>;
     info(): Promise<SystemInfo>;
     chooseModelsDir(): Promise<boolean>;
     revealModelsDir(): Promise<void>;

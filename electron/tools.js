@@ -114,7 +114,8 @@ export function createSandbox({ workspace, findRuntime: find = findRuntime }) {
 }
 
 // workspace() is the folder bash commands start in, mounted at /work for run_code.
-export function createTools({ workspace, findRuntime }) {
+// web: { canSearch(), search(query, signal), read(url, { offset, signal }) } for web_search and web_fetch.
+export function createTools({ workspace, findRuntime, web }) {
   const sandbox = createSandbox({ workspace, findRuntime });
   const bash = {
     name: "bash",
@@ -131,8 +132,28 @@ export function createTools({ workspace, findRuntime }) {
     readOnly: true,
   };
 
-  const has = (name) => name === bash.name || name === runCode.name;
-  const tools = async () => [bash, ...((await sandbox.available()) ? [runCode] : [])];
+  const webSearch = {
+    name: "web_search",
+    description: "Searches the web and returns the top results, each with its title, address and a short excerpt. Use it for recent events and for facts you aren't sure of, then read the most useful pages with web_fetch.",
+    parameters: { type: "object", properties: { query: { type: "string", description: "What to search for" } }, required: ["query"] },
+    readOnly: true,
+  };
+  const webFetch = {
+    name: "web_fetch",
+    description: "Reads a web page and returns its title, address and text, up to 8,000 characters at a time. When the text goes on, the result says which offset to call again with.",
+    parameters: {
+      type: "object",
+      properties: { url: { type: "string", description: "The page's full http or https address" }, offset: { type: "integer", description: "Where to start reading, in characters. Leave it out to start at the beginning." } },
+      required: ["url"],
+    },
+    // asks unless the address is already in the chat (the chat checks)
+    readOnly: false,
+    warning: "It sends this address to the website.",
+  };
+
+  const all = [bash, runCode, webSearch, webFetch];
+  const has = (name) => all.some((t) => t.name === name);
+  const tools = async () => [bash, ...((await sandbox.available()) ? [runCode] : []), ...(web ? [...(web.canSearch() ? [webSearch] : []), webFetch] : [])];
 
   async function call(name, args, signal) {
     if (name === "bash") {
@@ -142,6 +163,15 @@ export function createTools({ workspace, findRuntime }) {
     if (name === "run_code") {
       if (typeof args.code !== "string" || !args.code.trim()) return "Error: code must be a non-empty string.";
       return sandbox.runCode(args.code, signal);
+    }
+    if (name === "web_search") {
+      if (typeof args.query !== "string" || !args.query.trim()) return "Error: query must be a non-empty string.";
+      return web.search(args.query, signal);
+    }
+    if (name === "web_fetch") {
+      if (typeof args.url !== "string") return "Error: url must be a string.";
+      const offset = Number.isInteger(args.offset) && args.offset > 0 ? args.offset : 0;
+      return web.read(args.url.trim(), { offset, signal });
     }
     return `Error: there is no tool called ${name}.`;
   }

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, session, shell } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +7,7 @@ import { createEngine } from "./engine.js";
 import { createImageModels } from "./imageModels.js";
 import { createMcp } from "./mcp.js";
 import { createTools } from "./tools.js";
+import { createPageReader, search } from "./web.js";
 
 const configPath = () => path.join(app.getPath("userData"), "config.json");
 const readConfig = () => {
@@ -67,7 +68,17 @@ const mcp = createMcp({
   onSignedIn: () => (app.focus({ steal: true }), BrowserWindow.getAllWindows()[0]?.show()),
 });
 
-const builtins = createTools({ workspace: () => path.join(app.getPath("userData"), "workspace") });
+// The SearXNG instance web_search asks, e.g. http://127.0.0.1:8888
+const searchUrl = () => readConfig().searchUrl;
+let readPage; // made on first use: sessions need the app to be ready
+const builtins = createTools({
+  workspace: () => path.join(app.getPath("userData"), "workspace"),
+  web: {
+    canSearch: () => !!searchUrl(),
+    search: (query, signal) => search(query, searchUrl(), { signal }),
+    read: (url, opts) => (readPage ??= createPageReader({ BrowserWindow, session }))(url, opts),
+  },
+});
 // Tool calls in progress, by tool call id, so Stop can cancel them
 const running = new Map();
 
@@ -150,6 +161,12 @@ ipcMain.handle("tools:call", async (_, name, args, id) => {
   }
 });
 ipcMain.handle("tools:cancel", (_, id) => running.get(id)?.abort());
+ipcMain.handle("search-url:get", () => searchUrl() ?? "");
+ipcMain.handle("search-url:set", (_, url) => {
+  url = typeof url === "string" ? url.trim().replace(/\/+$/, "") : "";
+  if (url && !/^https?:\/\/[^/]+/.test(url)) throw new Error("The SearXNG address must start with http:// or https://");
+  writeConfig({ searchUrl: url || undefined });
+});
 ipcMain.handle("images:save", (_, id, b64) => {
   const file = imageFile(id);
   fs.mkdirSync(imagesDir(), { recursive: true });
