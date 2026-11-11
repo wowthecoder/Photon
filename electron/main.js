@@ -73,17 +73,19 @@ const mcp = createMcp({
 // The SearXNG web_search asks: the user's own (e.g. http://127.0.0.1:8888), or else one Photon runs itself
 const searchUrl = () => readConfig().searchUrl;
 const searxng = createSearxng({ dir: () => path.join(app.getPath("userData"), "searxng") });
-let readPage; // made on first use: sessions need the app to be ready
+let pageReader; // made on first use: sessions need the app to be ready
+const pages = () => (pageReader ??= createPageReader({ BrowserWindow, session }));
 const workspace = () => path.join(app.getPath("userData"), "workspace");
 const builtins = createTools({
   workspace,
   web: {
-    search: async (query, signal) => {
-      if (searchUrl()) return search(query, searchUrl(), { signal });
+    search: async (query, { read, signal }) => {
+      const load = read ? pages().load : undefined;
+      if (searchUrl()) return search(query, searchUrl(), { signal, load });
       const own = await searxng.url(signal);
-      return own.error ? `Error: ${own.error}` : search(query, own.url, { signal });
+      return own.error ? `Error: ${own.error}` : search(query, own.url, { signal, load });
     },
-    read: (url, opts) => (readPage ??= createPageReader({ BrowserWindow, session }))(url, opts),
+    read: (url, opts) => pages().read(url, opts),
   },
 });
 // Tool calls in progress, by tool call id, so Stop can cancel them

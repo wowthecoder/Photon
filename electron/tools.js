@@ -115,7 +115,7 @@ export function createSandbox({ workspace, findRuntime: find = findRuntime }) {
 }
 
 // workspace() is the folder bash commands start in, mounted at /work for run_code.
-// web: { search(query, signal), read(url, { offset, signal }) } for web_search and web_fetch.
+// web: { search(query, { read, signal }), read(url, { offset, signal }) } for web_search and web_fetch.
 export function createTools({ workspace, findRuntime, web }) {
   const sandbox = createSandbox({ workspace, findRuntime });
   const bash = {
@@ -135,8 +135,16 @@ export function createTools({ workspace, findRuntime, web }) {
 
   const webSearch = {
     name: "web_search",
-    description: "Searches the web and returns the top results, each with its title, address and a short excerpt. Use it for recent events and for facts you aren't sure of, then read the most useful pages with web_fetch.",
-    parameters: { type: "object", properties: { query: { type: "string", description: "What to search for" } }, required: ["query"] },
+    description:
+      "Searches the web and returns any instant answer, then the top results, each with its title, address and a short excerpt. It also reads the top 3 pages and adds the passages from them that match your query, so you can often answer straight away. Use it for recent events and for facts you aren't sure of. To read a whole page, use web_fetch.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What to search for" },
+        read: { type: "boolean", description: "Read the top pages and include matching passages (the default). Set it to false for just the list of results, which is faster." },
+      },
+      required: ["query"],
+    },
     readOnly: true,
   };
   const webFetch = {
@@ -208,7 +216,7 @@ export function createTools({ workspace, findRuntime, web }) {
     }
     if (name === "web_search") {
       if (typeof args.query !== "string" || !args.query.trim()) return "Error: query must be a non-empty string.";
-      return web.search(args.query, signal);
+      return web.search(args.query, { read: args.read !== false, signal });
     }
     if (name === "web_fetch") {
       if (typeof args.url !== "string") return "Error: url must be a string.";
