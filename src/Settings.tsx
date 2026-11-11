@@ -66,6 +66,14 @@ export function Settings({ open, settings, models, info, onChange, onClose }: Pr
           <span className="muted small">Photon asks before running each one. Commands start in Photon's workspace folder but can reach your whole Mac.</span>
         </div>
         <div className="field">
+          Workspace folder
+          <div className="folder">
+            <span className="folder-path" title={info?.workspaceDir}>{info?.workspaceDir ?? "…"}</span>
+            <button className="secondary-btn" onClick={() => window.photon?.revealWorkspace()}>Show in Finder</button>
+          </div>
+          <span className="muted small">Models read and write files here, and run code here, without asking. Put files in it to share them. Anywhere else, Photon asks first.</span>
+        </div>
+        <div className="field">
           <label className="check">
             <input type="checkbox" checked={settings.web} onChange={(e) => set("web", e.target.checked)} />
             Let models search and read the web

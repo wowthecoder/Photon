@@ -207,6 +207,12 @@ const prettyArgs = (args: string) => {
     const parsed = JSON.parse(args || "{}");
     const only = parsed && Object.keys(parsed).length === 1 ? (parsed.command ?? parsed.code) : undefined;
     if (typeof only === "string") return only;
+    // plain values (a path and a file's new text, say) show as labelled text; multi-line ones get space around them
+    const entries = Object.entries(parsed ?? {});
+    if (entries.length && entries.every(([, v]) => ["string", "number", "boolean"].includes(typeof v))) {
+      const multiline = entries.some(([, v]) => typeof v === "string" && v.includes("\n"));
+      return entries.map(([k, v]) => (typeof v === "string" && v.includes("\n") ? `${k}:\n${v}` : `${k}: ${v}`)).join(multiline ? "\n\n" : "\n");
+    }
     return JSON.stringify(parsed, null, 2);
   } catch {
     return args;

@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { createEngine } from "./engine.js";
 import { createImageModels } from "./imageModels.js";
 import { createMcp } from "./mcp.js";
+import { inWorkspace, resolvePath } from "./files.js";
 import { createTools } from "./tools.js";
 import { createPageReader, search } from "./web.js";
 
@@ -71,8 +72,9 @@ const mcp = createMcp({
 // The SearXNG instance web_search asks, e.g. http://127.0.0.1:8888
 const searchUrl = () => readConfig().searchUrl;
 let readPage; // made on first use: sessions need the app to be ready
+const workspace = () => path.join(app.getPath("userData"), "workspace");
 const builtins = createTools({
-  workspace: () => path.join(app.getPath("userData"), "workspace"),
+  workspace,
   web: {
     canSearch: () => !!searchUrl(),
     search: (query, signal) => search(query, searchUrl(), { signal }),
@@ -128,7 +130,7 @@ ipcMain.handle("info", async () => {
   const dir = modelsDir();
   fs.mkdirSync(dir, { recursive: true });
   const { bavail, bsize } = await fs.promises.statfs(dir);
-  return { modelsDir: dir, freeBytes: bavail * bsize, usedBytes: dirSize(dir), totalMem: os.totalmem() };
+  return { modelsDir: dir, freeBytes: bavail * bsize, usedBytes: dirSize(dir), totalMem: os.totalmem(), workspaceDir: workspace() };
 });
 ipcMain.handle("models:choose-dir", async (e) => {
   const { canceled, filePaths } = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), {
@@ -161,6 +163,8 @@ ipcMain.handle("tools:call", async (_, name, args, id) => {
   }
 });
 ipcMain.handle("tools:cancel", (_, id) => running.get(id)?.abort());
+ipcMain.handle("workspace:contains", (_, p) => typeof p === "string" && !!p.trim() && inWorkspace(resolvePath(p.trim(), workspace()), workspace()));
+ipcMain.handle("workspace:reveal", () => (fs.mkdirSync(workspace(), { recursive: true }), shell.openPath(workspace())));
 ipcMain.handle("search-url:get", () => searchUrl() ?? "");
 ipcMain.handle("search-url:set", (_, url) => {
   url = typeof url === "string" ? url.trim().replace(/\/+$/, "") : "";

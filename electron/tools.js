@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
+import { editFile, readFile, resolvePath, writeFile } from "./files.js";
 
 // Tools built into Photon, offered to the model next to the connectors' tools.
 const TIMEOUT = 120_000;
@@ -151,9 +152,48 @@ export function createTools({ workspace, findRuntime, web }) {
     warning: "It sends this address to the website.",
   };
 
-  const all = [bash, runCode, webSearch, webFetch];
+  // askOutsideWorkspace: runs without asking when its path is in the workspace (the chat checks with main)
+  const where = `Relative paths start in the workspace folder, ${workspace()}, where you can work freely; anywhere else the user is asked first.`;
+  const pathParam = { type: "string", description: "The file's path, absolute or relative to the workspace folder" };
+  const readFileTool = {
+    name: "read_file",
+    description: `Reads a text file and returns its contents, up to 8,000 characters at a time; when it goes on, the result says which offset to call again with. Given a folder, lists what's in it. ${where}`,
+    parameters: { type: "object", properties: { path: pathParam, offset: { type: "integer", description: "Where to start reading, in characters. Leave it out to start at the beginning." } }, required: ["path"] },
+    readOnly: false,
+    askOutsideWorkspace: true,
+    warning: "It reads a file outside Photon's workspace folder.",
+  };
+  const writeFileTool = {
+    name: "write_file",
+    description: `Creates a text file, or replaces everything in it, creating folders as needed. To change part of an existing file, use edit_file instead. ${where}`,
+    parameters: { type: "object", properties: { path: pathParam, content: { type: "string", description: "The file's full new contents" } }, required: ["path", "content"] },
+    readOnly: false,
+    askOutsideWorkspace: true,
+    warning: "It changes a file outside Photon's workspace folder.",
+  };
+  const editFileTool = {
+    name: "edit_file",
+    description: `Changes part of a text file: replaces old_text, which must appear exactly once in the file, with new_text. Read the file first and copy old_text exactly, with a few lines around the change so it's unique. ${where}`,
+    parameters: {
+      type: "object",
+      properties: { path: pathParam, old_text: { type: "string", description: "The exact text to replace" }, new_text: { type: "string", description: "What to put in its place" } },
+      required: ["path", "old_text", "new_text"],
+    },
+    readOnly: false,
+    askOutsideWorkspace: true,
+    warning: "It changes a file outside Photon's workspace folder.",
+  };
+
+  const all = [bash, runCode, webSearch, webFetch, readFileTool, writeFileTool, editFileTool];
   const has = (name) => all.some((t) => t.name === name);
-  const tools = async () => [bash, ...((await sandbox.available()) ? [runCode] : []), ...(web ? [...(web.canSearch() ? [webSearch] : []), webFetch] : [])];
+  const tools = async () => [
+    bash,
+    ...((await sandbox.available()) ? [runCode] : []),
+    ...(web ? [...(web.canSearch() ? [webSearch] : []), webFetch] : []),
+    readFileTool,
+    writeFileTool,
+    editFileTool,
+  ];
 
   async function call(name, args, signal) {
     if (name === "bash") {
@@ -172,6 +212,14 @@ export function createTools({ workspace, findRuntime, web }) {
       if (typeof args.url !== "string") return "Error: url must be a string.";
       const offset = Number.isInteger(args.offset) && args.offset > 0 ? args.offset : 0;
       return web.read(args.url.trim(), { offset, signal });
+    }
+    if (name === "read_file" || name === "write_file" || name === "edit_file") {
+      if (typeof args.path !== "string" || !args.path.trim()) return "Error: path must be a non-empty string.";
+      const p = resolvePath(args.path.trim(), workspace());
+      if (name === "read_file") return readFile(p, Number.isInteger(args.offset) && args.offset > 0 ? args.offset : 0);
+      if (name === "write_file") return typeof args.content === "string" ? writeFile(p, args.content) : "Error: content must be a string.";
+      if (typeof args.old_text !== "string" || !args.old_text) return "Error: old_text must be a non-empty string.";
+      return typeof args.new_text === "string" ? editFile(p, args.old_text, args.new_text) : "Error: new_text must be a string.";
     }
     return `Error: there is no tool called ${name}.`;
   }

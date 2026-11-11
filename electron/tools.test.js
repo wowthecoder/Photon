@@ -61,8 +61,8 @@ assert.equal(fs.readFileSync(log, "utf8").trim().split("\n").at(-1), `rm -f ${na
 
 // without a runtime, run_code isn't offered
 const none = createTools({ workspace: () => cwd, findRuntime: async () => undefined });
-assert.deepEqual((await none.tools()).map((t) => t.name), ["bash"]);
-assert.deepEqual((await createTools({ workspace: () => cwd, findRuntime: async () => docker }).tools()).map((t) => t.name), ["bash", "run_code"]);
+assert.deepEqual((await none.tools()).map((t) => t.name), ["bash", "read_file", "write_file", "edit_file"]);
+assert.deepEqual((await createTools({ workspace: () => cwd, findRuntime: async () => docker }).tools()).map((t) => t.name), ["bash", "run_code", "read_file", "write_file", "edit_file"]);
 
 fs.rmSync(cwd, { recursive: true, force: true });
 console.log("tools: ok");
