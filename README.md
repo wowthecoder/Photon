@@ -107,18 +107,18 @@ GitHub and Google don't let apps register themselves for OAuth, so Photon signs 
 2. Set **Homepage URL** to anything (e.g. your repo) and **Authorization callback URL** to `http://127.0.0.1/callback`. GitHub accepts any port for a `127.0.0.1` callback, so Photon can pick a free one each time.
 3. Create the app, click **Generate a new client secret**, and put both values under `"github"`.
 
-### Google (Gmail and Google Drive)
+### Google (Gmail, Google Drive and Google Calendar)
 
 Google's MCP servers are in developer preview, so this needs a Google Cloud project and membership in the [Google Workspace Developer Preview Program](https://developers.google.com/workspace/preview).
 
 1. Enable the APIs and their MCP servers in your project:
    ```bash
-   gcloud services enable gmail.googleapis.com drive.googleapis.com gmailmcp.googleapis.com drivemcp.googleapis.com --project=PROJECT_ID
+   gcloud services enable gmail.googleapis.com drive.googleapis.com calendar-json.googleapis.com gmailmcp.googleapis.com drivemcp.googleapis.com calendarmcp.googleapis.com --project=PROJECT_ID
    ```
 2. In **Google Auth Platform → Branding**, set up the consent screen. While the app is in **Testing**, add yourself under **Audience → Test users**. Google shows an "unverified app" warning, and sign-ins expire after 7 days until the app is published.
-3. In **Google Auth Platform → Data access**, add the scopes `gmail.readonly`, `gmail.compose`, `drive.readonly` and `drive.file`.
+3. In **Google Auth Platform → Data access**, add the scopes `gmail.readonly`, `gmail.compose`, `drive.readonly`, `drive.file`, `calendar.calendarlist.readonly`, `calendar.events.freebusy` and `calendar.events`. Google's guide lists `calendar.events.readonly`, but Photon asks for `calendar.events` so the model can create and answer events (it asks you first).
 4. In **Google Auth Platform → Clients**, create a client of type **Web application**, tick **Use this client for an AI-powered agent**, and add the redirect URI `http://127.0.0.1:53682/callback`.
-5. Put its client ID and secret under `"google"`, with `"redirectPort": 53682`. Web application clients need the exact callback URL, so Photon always listens on that port for Google. Gmail and Drive share this client, but each is signed in separately.
+5. Put its client ID and secret under `"google"`, with `"redirectPort": 53682`. Web application clients need the exact callback URL, so Photon always listens on that port for Google. Gmail, Drive and Calendar share this client, but each is signed in separately.
 
 ### Notion
 
