@@ -2,7 +2,7 @@
 
 A ChatGPT-style desktop chat app for macOS that runs language models entirely on your Mac. It's built with Electron, React, Vite and TypeScript, and uses llama.cpp's `llama-server` to run the models.
 
-You browse GGUF models on Hugging Face, download them inside the app, and chat with them. It also generates images locally, using stable-diffusion.cpp's `sd-server`. No data leaves your machine except the model downloads and the Hugging Face catalog searches.
+You browse GGUF models on Hugging Face, download them inside the app, and chat with them. It also generates images locally, using stable-diffusion.cpp's `sd-server`. No data leaves your machine except the model downloads, the Hugging Face catalog searches, and what you let models send: connector tool calls, and web searches and pages if you turn the web on.
 
 ## Requirements
 
@@ -42,7 +42,7 @@ node scripts/fetch-sd.js
 | `npm start` | Builds the UI and runs it in Electron without the dev server. |
 | `npm run dist` | Packages `release/Photon-<version>-arm64.dmg`, with llama.cpp and sd-server bundled. |
 | `npm run web` | Runs only the UI at http://localhost:1420 in a browser. The model engine isn't available there. |
-| `npm test` | Runs the catalog checks (quantization names, grouping, default quant) the image catalog checks (grouping by base model) the downloader checks (resume, size mismatch) and the connector checks (against a stub MCP server). |
+| `npm test` | Runs the catalog checks (quantization names, grouping, default quant) the image catalog checks (grouping by base model) the downloader checks (resume, size mismatch) the connector checks (against a stub MCP server), the tool checks (bash output, timeout and Stop; run_code against a stand-in for Docker) the web checks (blocked addresses, SearXNG results against a stub, page text) and the file checks (the workspace boundary with symlinks, reading in parts, edits). |
 
 Hot reload covers everything in `src/`. If you change anything in `electron/`, stop `npm run dev` and start it again.
 
@@ -61,9 +61,32 @@ To let a model use your GitHub, Gmail or Google Drive account:
 
 1. Open **Connectors** in the sidebar and click **+** next to it. (Each needs an OAuth app first; see [Connectors setup](#connectors-setup).)
 2. Your browser opens the provider's sign-in page. Approve Photon and you're sent back to the app.
-3. Chat with a model that supports tool calling (Qwen3, gpt-oss, Llama 3.2 and others). Tools that only read run straight away; Photon asks before running anything else. After 8 rounds of tool calls the model has to answer without them.
+3. Chat with a model that supports tool calling (Qwen3, gpt-oss, Llama 3.2 and others). Tools that only read run straight away; Photon asks before running anything else. After 20 rounds of tool calls the model has to answer without them.
 
 Photon talks to each provider's MCP server from the main process. Sign-ins are kept in `config.json`, encrypted with the macOS keychain. Clicking the check on a connected card forgets the sign-in; to revoke Photon's access completely, also remove it in your account (GitHub → Settings → Applications, or https://myaccount.google.com/connections).
+
+Models that support tool calling can also run shell commands on your Mac with the `bash` tool. Photon shows each command and asks before running it. Commands run with zsh as a login shell (so your PATH from `~/.zprofile` applies), start in `~/Library/Application Support/Photon/workspace`, can't read input, and are stopped after 2 minutes or when you click Stop, along with anything they started. The model gets the first 2,000 and last 6,000 characters of the output. Turn it off in **Settings → Let models run shell commands**.
+
+Models can also read, create and edit text files with `read_file` (which also lists folders), `write_file` and `edit_file` (which replaces one exact, unique piece of text, so a model doesn't have to rewrite a whole file). Inside the workspace folder they run without asking; anywhere else Photon shows the path and asks first, so a web page can't get a model to quietly read your files. Symlinks are followed, so a link in the workspace that points elsewhere counts as elsewhere. Files are read 8,000 characters at a time, up to 20 MB, text only. To share files with a model, put them in the workspace: **Settings → Workspace folder → Show in Finder**.
+
+With Docker or Apple's [container](https://github.com/apple/container) installed, models also get `run_code`, which runs Python in a throwaway Linux container. It runs without asking, because the container can't touch anything but the workspace folder (mounted at `/work`, so files are shared with `bash`), has 1 GB of memory and 2 CPUs, and has no internet. Only Python's standard library is installed. The first run after each launch pulls `python:3.14-slim` (about 50 MB), and runs stop after 2 minutes or when you click Stop.
+
+- **Apple's container** (macOS 26): run `brew install container` (or install the `.pkg` from its [releases](https://github.com/apple/container/releases)), and Photon does the rest: the first run after each launch starts its service (`container system start`) and, on a fresh install, downloads its Linux kernel. Photon creates a host-only network, `photon-sandbox`, for its containers: Apple's runtime has no way to turn networking off, so a container can't reach the internet but can reach services on your Mac that listen on more than `127.0.0.1`.
+- **Docker** (Docker Desktop, OrbStack or Colima): start it, and Photon uses it when Apple's container isn't installed. Containers get no network at all.
+
+Models can also search and read the web once you turn on **Settings → Let models search and read the web**. It's off until you do.
+
+- `web_fetch` reads a page and gives the model its text, 8,000 characters at a time. It runs without asking when the address is already in the chat (you typed it, or a search found it). For any other address Photon asks first, since a page could trick the model into putting your chat in an address. Pages load in a hidden window with its own session (none of Photon's cookies), without images, downloads or pop-ups, and they can't reach your Mac or local network (`localhost`, `192.168.x.x` and the like), including through redirects.
+- `web_search` asks a [SearXNG](https://docs.searxng.org) instance: free, no account, and it queries the search engines for you. Most public instances block apps, so run your own and put its address in Settings. With Apple's container (see `run_code` below):
+  ```bash
+  mkdir -p ~/searxng && printf 'use_default_settings: true\nserver:\n  secret_key: "%s"\n  limiter: false\nsearch:\n  formats: [html, json]\n' "$(openssl rand -hex 32)" > ~/searxng/settings.yml
+  ```
+  ```bash
+  container run -d --name searxng -p 127.0.0.1:8888:8080 -v ~/searxng:/etc/searxng searxng/searxng
+  ```
+  Then put `http://127.0.0.1:8888` in Settings. `formats` must include `json`, or SearXNG refuses Photon. After a restart, start it again with `container start searxng`. With Docker, run the same command with `docker`.
+
+  The first time something connects to the published port, macOS asks whether `container-runtime-linux` may find and connect to devices on your local network: Apple's runtime forwards the port to the container's own address (`192.168.64.x`), which macOS counts as the local network. Allow it. Until you do, every connection is reset and the runtime logs `No route to host` (see `container system logs`). To check or change it later: **System Settings → Privacy & Security → Local Network**. macOS remembers the permission by the program's path, so it may ask again after `brew upgrade container`.
 
 To generate images:
 
@@ -167,6 +190,9 @@ electron/main.js      Window, config.json, IPC handlers (folder picker, disk inf
 electron/engine.js    Starts, health-checks and stops a local server (llama-server, sd-server)
 electron/imageModels.js  Image model download status, download/pause/delete
 electron/imageFamilies.json  Supported image base models: recipe, text encoder and VAE
+electron/tools.js     Tools built into Photon: bash, run_code, web_search, web_fetch, the file tools (tested by tools.test.js)
+electron/files.js     read_file, write_file, edit_file, and the workspace boundary (tested by files.test.js)
+electron/web.js       SearXNG search, and reading pages in a hidden window (tested by web.test.js)
 electron/download.js  Resumable file download (tested by download.test.js)
 electron/preload.cjs  Exposes window.photon (engine state, folder actions) to the UI
 scripts/dev.js        Starts Vite, then Electron pointed at it

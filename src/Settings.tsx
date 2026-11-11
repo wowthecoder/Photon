@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Settings as SettingsT, Theme } from "./store";
 import { modelLabel, type LocalModel } from "./llm";
 import { formatBytes } from "./catalog";
@@ -15,9 +15,18 @@ type Props = {
 export function Settings({ open, settings, models, info, onChange, onClose }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const set = <K extends keyof SettingsT>(key: K, value: SettingsT[K]) => onChange({ ...settings, [key]: value });
+  // the SearXNG address lives in the main process, which does the searching
+  const [savedUrl, setSavedUrl] = useState("");
+  const [url, setUrl] = useState("");
+  const [urlError, setUrlError] = useState("");
+  const saveUrl = (u: string) =>
+    window.photon?.setSearchUrl(u).then(
+      () => window.photon!.searchUrl().then((s) => (setSavedUrl(s), setUrl(s), setUrlError(""))),
+      (e: Error) => setUrlError(e.message.replace(/^.*Error: /, "")),
+    );
 
   useEffect(() => {
-    if (open) ref.current?.showModal();
+    if (open) ref.current?.showModal(), window.photon?.searchUrl().then((s) => (setSavedUrl(s), setUrl(s)));
     else ref.current?.close();
   }, [open]);
 
@@ -49,6 +58,37 @@ export function Settings({ open, settings, models, info, onChange, onClose }: Pr
           <span>Temperature <span className="muted">{settings.temperature.toFixed(1)}</span></span>
           <input type="range" min={0} max={2} step={0.1} value={settings.temperature} onChange={(e) => set("temperature", +e.target.value)} />
         </label>
+        <div className="field">
+          <label className="check">
+            <input type="checkbox" checked={settings.shell} onChange={(e) => set("shell", e.target.checked)} />
+            Let models run shell commands
+          </label>
+          <span className="muted small">Photon asks before running each one. Commands start in Photon's workspace folder but can reach your whole Mac.</span>
+        </div>
+        <div className="field">
+          Workspace folder
+          <div className="folder">
+            <span className="folder-path" title={info?.workspaceDir}>{info?.workspaceDir ?? "…"}</span>
+            <button className="secondary-btn" onClick={() => window.photon?.revealWorkspace()}>Show in Finder</button>
+          </div>
+          <span className="muted small">Models read and write files here, and run code here, without asking. Put files in it to share them. Anywhere else, Photon asks first.</span>
+        </div>
+        <div className="field">
+          <label className="check">
+            <input type="checkbox" checked={settings.web} onChange={(e) => set("web", e.target.checked)} />
+            Let models search and read the web
+          </label>
+          <span className="muted small">Searches go to your SearXNG, and pages are loaded from their websites. Photon asks before opening an address that isn't already in the chat.</span>
+          {settings.web && (
+            <div className="folder">
+              <input type="url" placeholder="SearXNG address, e.g. http://127.0.0.1:8888" value={url} onChange={(e) => setUrl(e.target.value)} />
+              <button className="secondary-btn" disabled={url.trim().replace(/\/+$/, "") === savedUrl} onClick={() => saveUrl(url)}>Save</button>
+            </div>
+          )}
+          {settings.web && (urlError || !savedUrl) && (
+            <span className="muted small">{urlError || "Without a SearXNG address, models can read pages but not search. The README shows how to run SearXNG on your Mac."}</span>
+          )}
+        </div>
         <label>
           Appearance
           <select value={settings.theme} onChange={(e) => set("theme", e.target.value as Theme)}>

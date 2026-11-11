@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, session, shell } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,6 +6,9 @@ import { pathToFileURL } from "node:url";
 import { createEngine } from "./engine.js";
 import { createImageModels } from "./imageModels.js";
 import { createMcp } from "./mcp.js";
+import { inWorkspace, resolvePath } from "./files.js";
+import { createTools } from "./tools.js";
+import { createPageReader, search } from "./web.js";
 
 const configPath = () => path.join(app.getPath("userData"), "config.json");
 const readConfig = () => {
@@ -66,6 +69,21 @@ const mcp = createMcp({
   onSignedIn: () => (app.focus({ steal: true }), BrowserWindow.getAllWindows()[0]?.show()),
 });
 
+// The SearXNG instance web_search asks, e.g. http://127.0.0.1:8888
+const searchUrl = () => readConfig().searchUrl;
+let readPage; // made on first use: sessions need the app to be ready
+const workspace = () => path.join(app.getPath("userData"), "workspace");
+const builtins = createTools({
+  workspace,
+  web: {
+    canSearch: () => !!searchUrl(),
+    search: (query, signal) => search(query, searchUrl(), { signal }),
+    read: (url, opts) => (readPage ??= createPageReader({ BrowserWindow, session }))(url, opts),
+  },
+});
+// Tool calls in progress, by tool call id, so Stop can cancel them
+const running = new Map();
+
 // Generated images live as PNGs in the app data folder and are served to the UI as photon-image://local/<id>.png
 const imagesDir = () => path.join(app.getPath("userData"), "images");
 function imageFile(id) {
@@ -112,7 +130,7 @@ ipcMain.handle("info", async () => {
   const dir = modelsDir();
   fs.mkdirSync(dir, { recursive: true });
   const { bavail, bsize } = await fs.promises.statfs(dir);
-  return { modelsDir: dir, freeBytes: bavail * bsize, usedBytes: dirSize(dir), totalMem: os.totalmem() };
+  return { modelsDir: dir, freeBytes: bavail * bsize, usedBytes: dirSize(dir), totalMem: os.totalmem(), workspaceDir: workspace() };
 });
 ipcMain.handle("models:choose-dir", async (e) => {
   const { canceled, filePaths } = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), {
@@ -133,8 +151,26 @@ ipcMain.handle("image-models:delete", (_, id) => imageModels.remove(id));
 ipcMain.handle("connectors:list", mcp.list);
 ipcMain.handle("connectors:connect", (_, id) => mcp.connect(id));
 ipcMain.handle("connectors:disconnect", (_, id) => mcp.disconnect(id));
-ipcMain.handle("mcp:tools", mcp.tools);
-ipcMain.handle("mcp:call", (_, name, args) => mcp.call(String(name), args && typeof args === "object" ? args : {}));
+ipcMain.handle("tools:list", async () => [...(await builtins.tools()), ...mcp.tools()]);
+ipcMain.handle("tools:call", async (_, name, args, id) => {
+  const ctrl = new AbortController();
+  running.set(id, ctrl);
+  try {
+    args = args && typeof args === "object" ? args : {};
+    return await (builtins.has(name) ? builtins.call(name, args, ctrl.signal) : mcp.call(String(name), args, ctrl.signal));
+  } finally {
+    running.delete(id);
+  }
+});
+ipcMain.handle("tools:cancel", (_, id) => running.get(id)?.abort());
+ipcMain.handle("workspace:contains", (_, p) => typeof p === "string" && !!p.trim() && inWorkspace(resolvePath(p.trim(), workspace()), workspace()));
+ipcMain.handle("workspace:reveal", () => (fs.mkdirSync(workspace(), { recursive: true }), shell.openPath(workspace())));
+ipcMain.handle("search-url:get", () => searchUrl() ?? "");
+ipcMain.handle("search-url:set", (_, url) => {
+  url = typeof url === "string" ? url.trim().replace(/\/+$/, "") : "";
+  if (url && !/^https?:\/\/[^/]+/.test(url)) throw new Error("The SearXNG address must start with http:// or https://");
+  writeConfig({ searchUrl: url || undefined });
+});
 ipcMain.handle("images:save", (_, id, b64) => {
   const file = imageFile(id);
   fs.mkdirSync(imagesDir(), { recursive: true });

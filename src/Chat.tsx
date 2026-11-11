@@ -126,7 +126,7 @@ export function Chat({ chat, model, models, engine, streaming, approval, sidebar
 
       {approval && (
         <div className="approval">
-          <div>Run <code>{approval.call.name}</code>? It may change data in your account.</div>
+          <div>Run <code>{approval.call.name}</code>? {approval.warning ?? "It may change data in your account."}</div>
           <pre>{prettyArgs(approval.call.args)}</pre>
           <div className="approval-actions">
             <button className="secondary-btn" onClick={() => approval.resolve(false)}>Don't allow</button>
@@ -201,9 +201,19 @@ function AttachmentView({ attachment }: { attachment: Attachment }) {
   );
 }
 
+// a shell command or Python code shows as typed, not as escaped JSON, so it's easy to read and check
 const prettyArgs = (args: string) => {
   try {
-    return JSON.stringify(JSON.parse(args || "{}"), null, 2);
+    const parsed = JSON.parse(args || "{}");
+    const only = parsed && Object.keys(parsed).length === 1 ? (parsed.command ?? parsed.code) : undefined;
+    if (typeof only === "string") return only;
+    // plain values (a path and a file's new text, say) show as labelled text; multi-line ones get space around them
+    const entries = Object.entries(parsed ?? {});
+    if (entries.length && entries.every(([, v]) => ["string", "number", "boolean"].includes(typeof v))) {
+      const multiline = entries.some(([, v]) => typeof v === "string" && v.includes("\n"));
+      return entries.map(([k, v]) => (typeof v === "string" && v.includes("\n") ? `${k}:\n${v}` : `${k}: ${v}`)).join(multiline ? "\n\n" : "\n");
+    }
+    return JSON.stringify(parsed, null, 2);
   } catch {
     return args;
   }

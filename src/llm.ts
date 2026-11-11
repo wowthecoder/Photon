@@ -66,10 +66,12 @@ export async function watchModels(engine: EngineState, onEvent: (e: ModelEvent) 
 
 // Attachments the model can't read are left out (e.g. after switching a chat to a text-only model).
 // An assistant turn that called tools becomes the assistant message plus one "tool" message per result.
-async function toApiMessages({ role, content, attachments = [], toolCalls }: Message, inputs: string[]): Promise<object[]> {
+// It keeps its reasoning: thinking models (Qwen3.5 and others) that don't see why they called a tool
+// often write their answer inside an unclosed <think> and stop, leaving the reply empty.
+async function toApiMessages({ role, content, reasoning, attachments = [], toolCalls }: Message, inputs: string[]): Promise<object[]> {
   if (toolCalls?.length)
     return [
-      { role, content, tool_calls: toolCalls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.args } })) },
+      { role, content, ...(reasoning ? { reasoning_content: reasoning } : {}), tool_calls: toolCalls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.args } })) },
       ...toolCalls.map((c) => ({ role: "tool", tool_call_id: c.id, content: c.result ?? "The tool didn't run." })),
     ];
   const usable = attachments.filter((a) => inputs.includes(a.kind));

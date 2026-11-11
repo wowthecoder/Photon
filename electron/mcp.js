@@ -165,12 +165,12 @@ export function createMcp({ onChange, store, clients = {}, openUrl, onSignedIn =
       })),
     );
 
-  async function call(name, args) {
+  async function call(name, args, signal) {
     const sep = name.indexOf("_");
     const client = live.get(name.slice(0, sep))?.client;
     if (!client) return `Error: ${name} isn't available. Its connector is disconnected.`;
     try {
-      return textOf(await client.callTool({ name: name.slice(sep + 1), arguments: args }));
+      return textOf(await client.callTool({ name: name.slice(sep + 1), arguments: args }, undefined, { signal }));
     } catch (e) {
       return `Error: ${message(e)}`;
     }

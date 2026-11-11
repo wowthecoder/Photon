@@ -11,18 +11,50 @@ import { usePersistent, type Attachment, type Chat as ChatT, type Message, type 
 import { useEngine } from "./useEngine";
 
 // after this many tool rounds the model has to answer without tools
-const MAX_TOOL_ROUNDS = 8;
+const MAX_TOOL_ROUNDS = 20;
 
-const parseArgs = (args: string) => {
+// null when the model wrote arguments that aren't a JSON object
+const parseArgs = (args: string): object | null => {
   try {
     const parsed = JSON.parse(args || "{}");
-    return parsed && typeof parsed === "object" ? parsed : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
   } catch {
-    return {};
+    return null;
   }
 };
 
-const DEFAULT_SETTINGS: SettingsT = { model: "", systemPrompt: "", temperature: 0.7, theme: "system" };
+const WEB_TOOLS = ["web_search", "web_fetch"];
+
+// without the second sentence, models retry the same thing with other tools, and the user gets one prompt after another
+const DECLINED = "The user declined to run this tool. Don't retry it or try to do the same thing another way: answer with what you have, or say what you'd need.";
+
+// web_fetch runs without asking when its address is already in the chat: typed by the user or returned by a tool
+// (e.g. a search result). Otherwise a page could get the model to send what's in the chat to another site in an address.
+const inChat = (call: ToolCall, messages: Message[]) => {
+  const url = (parseArgs(call.args) as { url?: unknown } | null)?.url;
+  return typeof url === "string" && url.length > 0 && messages.some((m) => (m.role === "user" && m.content.includes(url)) || m.toolCalls?.some((c) => c.result?.includes(url)));
+};
+
+// file tools run without asking when their path is in the workspace folder; the main process resolves it
+const inWorkspace = async (tool: McpTool, call: ToolCall) => {
+  const path = (parseArgs(call.args) as { path?: unknown } | null)?.path;
+  return !!tool.askOutsideWorkspace && typeof path === "string" && !!(await window.photon?.inWorkspace(path).catch(() => false));
+};
+
+// runs a tool; Stop cancels it (bash kills its command)
+async function runTool(call: ToolCall, signal: AbortSignal) {
+  const args = parseArgs(call.args);
+  if (!args) return "Error: the arguments aren't a valid JSON object.";
+  const cancel = () => window.photon!.cancelTool(call.id);
+  signal.addEventListener("abort", cancel, { once: true });
+  try {
+    return await window.photon!.callTool(call.name, args, call.id);
+  } finally {
+    signal.removeEventListener("abort", cancel);
+  }
+}
+
+const DEFAULT_SETTINGS: SettingsT = { model: "", systemPrompt: "", temperature: 0.7, theme: "system", shell: true, web: false };
 
 export function App() {
   const [chats, setChats] = usePersistent<ChatT[]>("chats", []);
@@ -74,18 +106,18 @@ export function App() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setStreaming(true);
-    const ask = (call: ToolCall) =>
+    const ask = (call: ToolCall, warning?: string) =>
       new Promise<boolean>((resolve) => {
         const done = (ok: boolean) => (setApproval(null), resolve(ok));
         ctrl.signal.addEventListener("abort", () => done(false), { once: true });
-        setApproval({ chatId: chat.id, call, resolve: done });
+        setApproval({ chatId: chat.id, call, warning, resolve: done });
       });
 
     let reply: Message = { id: crypto.randomUUID(), role: "assistant", content: "" };
     try {
       // free the image model first: a chat model and an image model may not both fit in memory
       if (diffusion.status === "ready") await unloadImageModel(diffusion).catch(() => {});
-      const tools = (await window.photon?.mcpTools().catch(() => [])) ?? [];
+      const tools = ((await window.photon?.tools().catch(() => [])) ?? []).filter((t) => (settings.shell || t.name !== "bash") && (settings.web || !WEB_TOOLS.includes(t.name)));
       for (let round = 0; ; round++) {
         reply = { id: crypto.randomUUID(), role: "assistant", content: "" };
         update(chat.id, (c) => ({ ...c, messages: [...c.messages, reply] }));
@@ -105,12 +137,14 @@ export function App() {
           reply = { ...reply, toolCalls: [...(reply.toolCalls ?? []), call] };
           const { toolCalls } = reply;
           patch(reply.id, (m) => ({ ...m, toolCalls }));
-          const ok = !!tool && (tool.readOnly || (await ask(call)));
+          const ok = !!tool && (tool.readOnly || (call.name === "web_fetch" && inChat(call, [...history, reply])) || (await inWorkspace(tool, call)) || (await ask(call, tool.warning)));
           if (ctrl.signal.aborted) throw new Error("Stopped");
-          const result = !tool ? `Error: there is no tool called ${call.name}.` : ok ? await window.photon!.mcpCall(call.name, parseArgs(call.args)) : "The user declined to run this tool.";
+          const result = !tool ? `Error: there is no tool called ${call.name}.` : ok ? await runTool(call, ctrl.signal) : DECLINED;
           reply = { ...reply, toolCalls: reply.toolCalls!.map((c) => (c.id === call.id ? { ...c, result } : c)) };
           const done = reply.toolCalls;
           patch(reply.id, (m) => ({ ...m, toolCalls: done }));
+          // keep what a stopped command printed, but don't start another round
+          if (ctrl.signal.aborted) throw new Error("Stopped");
         }
         history.push(reply);
       }

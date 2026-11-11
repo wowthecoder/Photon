@@ -18,11 +18,14 @@ type ImageModel = {
   files: ImageModelFile[];
 };
 type ImageDownload = { base: string; repo: string; path: string; quant: string; size: number };
-type SystemInfo = { modelsDir: string; freeBytes: number; usedBytes: number; totalMem: number };
+type SystemInfo = { modelsDir: string; freeBytes: number; usedBytes: number; totalMem: number; workspaceDir: string };
 
 // setUp: false when the connector needs an OAuth app that oauth-clients.json doesn't have
 type Connector = { id: string; name: string; description: string; status: "off" | "connecting" | "on" | "error"; error?: string; toolCount: number; setUp: boolean };
-type McpTool = { name: string; description: string; parameters: object; readOnly: boolean };
+// a tool the model can call: a connector's (<connector id>_<tool>) or one built into Photon (e.g. bash)
+// warning: what the approval prompt says the tool may do
+// askOutsideWorkspace: runs without asking when its path argument is in Photon's workspace folder (file tools)
+type McpTool = { name: string; description: string; parameters: object; readOnly: boolean; warning?: string; askOutsideWorkspace?: boolean };
 
 interface Window {
   photon?: {
@@ -48,8 +51,16 @@ interface Window {
     onConnectors(cb: (list: Connector[]) => void): () => void;
     connect(id: string): Promise<void>;
     disconnect(id: string): Promise<void>;
-    mcpTools(): Promise<McpTool[]>;
-    mcpCall(name: string, args: object): Promise<string>;
+    tools(): Promise<McpTool[]>;
+    callTool(name: string, args: object, id: string): Promise<string>;
+    cancelTool(id: string): Promise<void>;
+    /** whether a file tool's path is in the workspace folder, after following symlinks */
+    inWorkspace(path: string): Promise<boolean>;
+    revealWorkspace(): Promise<void>;
+    /** the SearXNG address web_search uses; "" when there's none */
+    searchUrl(): Promise<string>;
+    /** an empty address removes it */
+    setSearchUrl(url: string): Promise<void>;
     info(): Promise<SystemInfo>;
     chooseModelsDir(): Promise<boolean>;
     revealModelsDir(): Promise<void>;

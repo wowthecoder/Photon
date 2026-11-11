@@ -9,7 +9,7 @@
     "build": "tsc && vite build",
     "start": "npm run build && electron .",
     "dist": "node scripts/fetch-llama.js && node scripts/fetch-sd.js && npm run build && electron-builder --mac",
-    "test": "node src/catalog.test.ts && node src/imageCatalog.test.ts && node electron/download.test.js && node electron/mcp.test.js"
+    "test": "node src/catalog.test.ts && node src/imageCatalog.test.ts && node electron/download.test.js && node electron/mcp.test.js && node electron/tools.test.js && node electron/web.test.js && node electron/files.test.js"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
