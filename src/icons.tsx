@@ -16,3 +16,5 @@ export const ModelsIcon = icon("M12 3 4 7.5v9L12 21l8-4.5v-9ZM4 7.5l8 4.5 8-4.5M
 export const ConnectorsIcon = icon("M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0ZM12 16v5");
 export const PlusIcon = icon("M12 5v14M5 12h14");
 export const CheckIcon = icon("M5 12.5l4.5 4.5L19 7.5");
+export const ChevronRightIcon = icon("M9 6l6 6-6 6");
+export const GlobeIcon = icon("M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z");

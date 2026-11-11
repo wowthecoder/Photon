@@ -2,7 +2,7 @@
 
 A ChatGPT-style desktop chat app for macOS that runs language models entirely on your Mac. It's built with Electron, React, Vite and TypeScript, and uses llama.cpp's `llama-server` to run the models.
 
-You browse GGUF models on Hugging Face, download them inside the app, and chat with them. It also generates images locally, using stable-diffusion.cpp's `sd-server`. No data leaves your machine except the model downloads, the Hugging Face catalog searches, and what you let models send: connector tool calls, and web searches and pages if you turn the web on.
+You browse GGUF models on Hugging Face, download them inside the app, and chat with them. It also generates images locally, using stable-diffusion.cpp's `sd-server`. No data leaves your machine except the model downloads, the Hugging Face catalog searches, and what you let models send: connector tool calls, and web searches and pages while web search is on.
 
 ## Requirements
 
@@ -55,13 +55,13 @@ The `.dmg` isn't code-signed. The first time you open it, macOS will block it: r
 3. Click a model to see where you can download it from: the official publisher and the trusted quantizers (ggml-org, unsloth, bartowski, lmstudio-community). Each source has a quantization picker with exact file sizes, defaulting to a 4-bit file.
 4. Click **Download**. Progress appears there and in **Text → Downloaded**, where you can pause, resume or delete.
 5. Start a new chat (⌘N) and pick the model in the header. It loads into memory on the first message.
-6. Models marked **Vision** or **Audio** can read attachments. With one selected, click the paperclip in the message box, paste an image, or drop a file on it. Images are sent as PNG; audio can be MP3, WAV or FLAC. Attachments are saved in `~/Library/Application Support/Photon/attachments` and deleted with their chat.
+6. Models marked **Vision** or **Audio** can read attachments. With one selected, click **+** in the message box and choose **Attach**, paste an image, or drop a file on the box. Images are sent as PNG; audio can be MP3, WAV or FLAC. Attachments are saved in `~/Library/Application Support/Photon/attachments` and deleted with their chat.
 
 To let a model use your GitHub, Gmail or Google Drive account:
 
 1. Open **Connectors** in the sidebar and click **+** next to it. (Each needs an OAuth app first; see [Connectors setup](#connectors-setup).)
 2. Your browser opens the provider's sign-in page. Approve Photon and you're sent back to the app.
-3. Chat with a model that supports tool calling (Qwen3, gpt-oss, Llama 3.2 and others). Tools that only read run straight away; Photon asks before running anything else. After 20 rounds of tool calls the model has to answer without them.
+3. Chat with a model that supports tool calling (Qwen3, gpt-oss, Llama 3.2 and others). To keep a connector's tools out of the model's prompt (small models get confused by dozens of tools), switch it off under **+ → Connectors** in the message box; it stays connected. Tools that only read run straight away; Photon asks before running anything else. After 20 rounds of tool calls the model has to answer without them.
 
 Photon talks to each provider's MCP server from the main process. Sign-ins are kept in `config.json`, encrypted with the macOS keychain. Clicking the check on a connected card forgets the sign-in; to revoke Photon's access completely, also remove it in your account (GitHub → Settings → Applications, or https://myaccount.google.com/connections).
 
@@ -74,10 +74,10 @@ With Docker or Apple's [container](https://github.com/apple/container) installed
 - **Apple's container** (macOS 26): run `brew install container` (or install the `.pkg` from its [releases](https://github.com/apple/container/releases)), and Photon does the rest: the first run after each launch starts its service (`container system start`) and, on a fresh install, downloads its Linux kernel. Photon creates a host-only network, `photon-sandbox`, for its containers: Apple's runtime has no way to turn networking off, so a container can't reach the internet but can reach services on your Mac that listen on more than `127.0.0.1`.
 - **Docker** (Docker Desktop, OrbStack or Colima): start it, and Photon uses it when Apple's container isn't installed. Containers get no network at all.
 
-Models can also search and read the web once you turn on **Settings → Let models search and read the web**. It's off until you do.
+Models can also search and read the web. It's on by default; switch it off with **+ → Web search** in the message box.
 
 - `web_fetch` reads a page and gives the model its text, 8,000 characters at a time. It runs without asking when the address is already in the chat (you typed it, or a search found it). For any other address Photon asks first, since a page could trick the model into putting your chat in an address. Pages load in a hidden window with its own session (none of Photon's cookies), without images, downloads or pop-ups, and they can't reach your Mac or local network (`localhost`, `192.168.x.x` and the like), including through redirects.
-- `web_search` asks a [SearXNG](https://docs.searxng.org) instance: free, no account, and it queries the search engines for you. Most public instances block apps, so run your own and put its address in Settings. With Apple's container (see `run_code` below):
+- `web_search` asks a [SearXNG](https://docs.searxng.org) instance: free, no account, and it queries the search engines for you. Most public instances block apps, so run your own and put its address in **Settings → Web search**. With Apple's container (see `run_code` below):
   ```bash
   mkdir -p ~/searxng && printf 'use_default_settings: true\nserver:\n  secret_key: "%s"\n  limiter: false\nsearch:\n  formats: [html, json]\n' "$(openssl rand -hex 32)" > ~/searxng/settings.yml
   ```

@@ -54,7 +54,7 @@ async function runTool(call: ToolCall, signal: AbortSignal) {
   }
 }
 
-const DEFAULT_SETTINGS: SettingsT = { model: "", systemPrompt: "", temperature: 0.7, theme: "system", shell: true, web: false };
+const DEFAULT_SETTINGS: SettingsT = { model: "", systemPrompt: "", temperature: 0.7, theme: "system", shell: true, web: true, disabledConnectors: [] };
 
 export function App() {
   const [chats, setChats] = usePersistent<ChatT[]>("chats", []);
@@ -117,7 +117,9 @@ export function App() {
     try {
       // free the image model first: a chat model and an image model may not both fit in memory
       if (diffusion.status === "ready") await unloadImageModel(diffusion).catch(() => {});
-      const tools = ((await window.photon?.tools().catch(() => [])) ?? []).filter((t) => (settings.shell || t.name !== "bash") && (settings.web || !WEB_TOOLS.includes(t.name)));
+      const tools = ((await window.photon?.tools().catch(() => [])) ?? []).filter(
+        (t) => (settings.shell || t.name !== "bash") && (settings.web || !WEB_TOOLS.includes(t.name)) && !(t.connector && settings.disabledConnectors.includes(t.connector)),
+      );
       for (let round = 0; ; round++) {
         reply = { id: crypto.randomUUID(), role: "assistant", content: "" };
         update(chat.id, (c) => ({ ...c, messages: [...c.messages, reply] }));
@@ -216,6 +218,11 @@ export function App() {
           engine={engine}
           streaming={streaming}
           approval={approval?.chatId === active?.id ? approval : null}
+          web={settings.web}
+          onWebChange={(web) => setSettings({ ...settings, web })}
+          disabledConnectors={settings.disabledConnectors}
+          onConnectorChange={(id, on) => setSettings({ ...settings, disabledConnectors: on ? settings.disabledConnectors.filter((c) => c !== id) : [...settings.disabledConnectors, id] })}
+          onOpenConnectors={() => setView("connectors")}
           sidebarOpen={sidebarOpen}
           onModelChange={(model) => (active ? update(active.id, (c) => ({ ...c, model })) : setSettings({ ...settings, model }))}
           onSend={send}

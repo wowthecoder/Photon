@@ -25,7 +25,8 @@ type Connector = { id: string; name: string; description: string; status: "off" 
 // a tool the model can call: a connector's (<connector id>_<tool>) or one built into Photon (e.g. bash)
 // warning: what the approval prompt says the tool may do
 // askOutsideWorkspace: runs without asking when its path argument is in Photon's workspace folder (file tools)
-type McpTool = { name: string; description: string; parameters: object; readOnly: boolean; warning?: string; askOutsideWorkspace?: boolean };
+// connector: the id of the connector a tool comes from; built-in tools have none
+type McpTool = { name: string; description: string; parameters: object; readOnly: boolean; warning?: string; askOutsideWorkspace?: boolean; connector?: string };
 
 interface Window {
   photon?: {
