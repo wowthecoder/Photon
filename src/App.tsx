@@ -28,13 +28,6 @@ const WEB_TOOLS = ["web_search", "web_fetch"];
 // without the second sentence, models retry the same thing with other tools, and the user gets one prompt after another
 const DECLINED = "The user declined to run this tool. Don't retry it or try to do the same thing another way: answer with what you have, or say what you'd need.";
 
-// web_fetch runs without asking when its address is already in the chat: typed by the user or returned by a tool
-// (e.g. a search result). Otherwise a page could get the model to send what's in the chat to another site in an address.
-const inChat = (call: ToolCall, messages: Message[]) => {
-  const url = (parseArgs(call.args) as { url?: unknown } | null)?.url;
-  return typeof url === "string" && url.length > 0 && messages.some((m) => (m.role === "user" && m.content.includes(url)) || m.toolCalls?.some((c) => c.result?.includes(url)));
-};
-
 // file tools run without asking when their path is in the workspace folder; the main process resolves it
 const inWorkspace = async (tool: McpTool, call: ToolCall) => {
   const path = (parseArgs(call.args) as { path?: unknown } | null)?.path;
@@ -139,7 +132,7 @@ export function App() {
           reply = { ...reply, toolCalls: [...(reply.toolCalls ?? []), call] };
           const { toolCalls } = reply;
           patch(reply.id, (m) => ({ ...m, toolCalls }));
-          const ok = !!tool && (tool.readOnly || (call.name === "web_fetch" && inChat(call, [...history, reply])) || (await inWorkspace(tool, call)) || (await ask(call, tool.warning)));
+          const ok = !!tool && (tool.readOnly || (await inWorkspace(tool, call)) || (await ask(call, tool.warning)));
           if (ctrl.signal.aborted) throw new Error("Stopped");
           const result = !tool ? `Error: there is no tool called ${call.name}.` : ok ? await runTool(call, ctrl.signal) : DECLINED;
           reply = { ...reply, toolCalls: reply.toolCalls!.map((c) => (c.id === call.id ? { ...c, result } : c)) };

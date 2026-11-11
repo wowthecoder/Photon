@@ -379,6 +379,7 @@ button { background: none; border: 0; cursor: pointer; }
   inset: auto;
   margin: 0 0 8px;
   min-width: 220px;
+  max-width: 280px;
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: 12px;

@@ -42,7 +42,7 @@ node scripts/fetch-sd.js
 | `npm start` | Builds the UI and runs it in Electron without the dev server. |
 | `npm run dist` | Packages `release/Photon-<version>-arm64.dmg`, with llama.cpp and sd-server bundled. |
 | `npm run web` | Runs only the UI at http://localhost:1420 in a browser. The model engine isn't available there. |
-| `npm test` | Runs the catalog checks (quantization names, grouping, default quant) the image catalog checks (grouping by base model) the downloader checks (resume, size mismatch) the connector checks (against a stub MCP server), the tool checks (bash output, timeout and Stop; run_code against a stand-in for Docker) the web checks (blocked addresses, SearXNG results against a stub, page text) and the file checks (the workspace boundary with symlinks, reading in parts, edits). |
+| `npm test` | Runs the catalog checks (quantization names, grouping, default quant) the image catalog checks (grouping by base model) the downloader checks (resume, size mismatch) the connector checks (against a stub MCP server), the tool checks (bash output, timeout and Stop; run_code against a stand-in for Docker) the web checks (blocked addresses, SearXNG results against a stub, page text) the file checks (the workspace boundary with symlinks, reading in parts, edits) and the SearXNG checks (starting, sharing and removing its container, against a stand-in for Docker). |
 
 Hot reload covers everything in `src/`. If you change anything in `electron/`, stop `npm run dev` and start it again.
 
@@ -76,17 +76,12 @@ With Docker or Apple's [container](https://github.com/apple/container) installed
 
 Models can also search and read the web. It's on by default; switch it off with **+ → Web search** in the message box.
 
-- `web_fetch` reads a page and gives the model its text, 8,000 characters at a time. It runs without asking when the address is already in the chat (you typed it, or a search found it). For any other address Photon asks first, since a page could trick the model into putting your chat in an address. Pages load in a hidden window with its own session (none of Photon's cookies), without images, downloads or pop-ups, and they can't reach your Mac or local network (`localhost`, `192.168.x.x` and the like), including through redirects.
-- `web_search` asks a [SearXNG](https://docs.searxng.org) instance: free, no account, and it queries the search engines for you. Most public instances block apps, so run your own and put its address in **Settings → Web search**. With Apple's container (see `run_code` below):
-  ```bash
-  mkdir -p ~/searxng && printf 'use_default_settings: true\nserver:\n  secret_key: "%s"\n  limiter: false\nsearch:\n  formats: [html, json]\n' "$(openssl rand -hex 32)" > ~/searxng/settings.yml
-  ```
-  ```bash
-  container run -d --name searxng -p 127.0.0.1:8888:8080 -v ~/searxng:/etc/searxng searxng/searxng
-  ```
-  Then put `http://127.0.0.1:8888` in Settings. `formats` must include `json`, or SearXNG refuses Photon. After a restart, start it again with `container start searxng`. With Docker, run the same command with `docker`.
+- `web_fetch` reads a page and gives the model its text, 8,000 characters at a time. It runs without asking, like `web_search`. That means a page could, in principle, trick a model into putting text from your chat in an address it fetches; turn web search off for chats you'd rather keep away from the web. Pages load in a hidden window with its own session (none of Photon's cookies), without images, downloads or pop-ups, and they can't reach your Mac or local network (`localhost`, `192.168.x.x` and the like), including through redirects.
+- `web_search` asks [SearXNG](https://docs.searxng.org): free, no account, and it queries the search engines for you. Photon runs its own with Docker or Apple's container (see `run_code` below): the first search after each launch starts a `photon-searxng` container on a free port on `127.0.0.1` (about 25 seconds from cold, about a second per search after that), and quitting Photon removes it. Its settings, with JSON turned on and a random secret, are in `~/Library/Application Support/Photon/searxng/settings.yml`. Without Docker or Apple's container, `web_search` tells the model it can't search, and the **+** menu says so too.
 
-  The first time something connects to the published port, macOS asks whether `container-runtime-linux` may find and connect to devices on your local network: Apple's runtime forwards the port to the container's own address (`192.168.64.x`), which macOS counts as the local network. Allow it. Until you do, every connection is reset and the runtime logs `No route to host` (see `container system logs`). To check or change it later: **System Settings → Privacy & Security → Local Network**. macOS remembers the permission by the program's path, so it may ask again after `brew upgrade container`.
+  To use a SearXNG of your own instead, put its address in **Settings → Web search**. Its settings must list `json` under `search.formats`, or it refuses Photon.
+
+  With Apple's container, the first search may make macOS ask whether `container-runtime-linux` may find and connect to devices on your local network: Apple's runtime forwards the port to the container's own address (`192.168.64.x`), which macOS counts as the local network. Allow it. Until you do, every connection is reset, the runtime logs `No route to host` (see `container system logs`), and the search says Photon can't reach SearXNG. To check or change it later: **System Settings → Privacy & Security → Local Network**. macOS remembers the permission by the program's path, so it may ask again after `brew upgrade container`.
 
 To generate images:
 
@@ -189,6 +184,7 @@ electron/imageFamilies.json  Supported image base models: recipe, text encoder a
 electron/tools.js     Tools built into Photon: bash, run_code, web_search, web_fetch, the file tools (tested by tools.test.js)
 electron/files.js     read_file, write_file, edit_file, and the workspace boundary (tested by files.test.js)
 electron/web.js       SearXNG search, and reading pages in a hidden window (tested by web.test.js)
+electron/searxng.js   The SearXNG container Photon runs for web_search (tested by searxng.test.js)
 electron/download.js  Resumable file download (tested by download.test.js)
 electron/preload.cjs  Exposes window.photon (engine state, folder actions) to the UI
 scripts/dev.js        Starts Vite, then Electron pointed at it

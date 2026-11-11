@@ -60,8 +60,10 @@ interface Window {
     revealWorkspace(): Promise<void>;
     /** the SearXNG address web_search uses; "" when there's none */
     searchUrl(): Promise<string>;
-    /** an empty address removes it */
+    /** an empty address removes it, and Photon runs its own SearXNG */
     setSearchUrl(url: string): Promise<void>;
+    /** why web_search can't work (no address and no container runtime); "" when it can */
+    searchProblem(): Promise<string>;
     info(): Promise<SystemInfo>;
     chooseModelsDir(): Promise<boolean>;
     revealModelsDir(): Promise<void>;

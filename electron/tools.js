@@ -8,7 +8,7 @@ import { editFile, readFile, resolvePath, writeFile } from "./files.js";
 // Tools built into Photon, offered to the model next to the connectors' tools.
 const TIMEOUT = 120_000;
 // the first run_code of a launch pulls the Python image (about 50 MB)
-const PULL_TIMEOUT = 600_000;
+export const PULL_TIMEOUT = 600_000;
 // local models often have 8–32k tokens of context; one `ls -R` shouldn't fill it
 const HEAD = 2_000;
 const TAIL = 6_000;
@@ -74,7 +74,7 @@ export const RUNTIMES = [
   { bin: "docker", flags: ["--network", "none", "--quiet"], setup: [] },
 ];
 
-async function findRuntime() {
+export async function findRuntime() {
   const PATH = await getLoginPath();
   const dirs = PATH.split(":");
   const rt = RUNTIMES.find((r) => dirs.some((d) => fs.existsSync(path.join(d, r.bin))));
@@ -115,7 +115,7 @@ export function createSandbox({ workspace, findRuntime: find = findRuntime }) {
 }
 
 // workspace() is the folder bash commands start in, mounted at /work for run_code.
-// web: { canSearch(), search(query, signal), read(url, { offset, signal }) } for web_search and web_fetch.
+// web: { search(query, signal), read(url, { offset, signal }) } for web_search and web_fetch.
 export function createTools({ workspace, findRuntime, web }) {
   const sandbox = createSandbox({ workspace, findRuntime });
   const bash = {
@@ -141,15 +141,15 @@ export function createTools({ workspace, findRuntime, web }) {
   };
   const webFetch = {
     name: "web_fetch",
-    description: "Reads a web page and returns its title, address and text, up to 8,000 characters at a time. When the text goes on, the result says which offset to call again with.",
+    description: "Reads a web page and returns its title, address and text, up to 8,000 characters at a time. When the text goes on, the result says which offset to call again with. Find pages with web_search first instead of guessing addresses.",
     parameters: {
       type: "object",
       properties: { url: { type: "string", description: "The page's full http or https address" }, offset: { type: "integer", description: "Where to start reading, in characters. Leave it out to start at the beginning." } },
       required: ["url"],
     },
-    // asks unless the address is already in the chat (the chat checks)
-    readOnly: false,
-    warning: "It sends this address to the website.",
+    // runs without asking, at the user's request. A page could get a model to put chat text in an address it fetches;
+    // local addresses stay blocked either way (see web.js)
+    readOnly: true,
   };
 
   // askOutsideWorkspace: runs without asking when its path is in the workspace (the chat checks with main)
@@ -189,7 +189,9 @@ export function createTools({ workspace, findRuntime, web }) {
   const tools = async () => [
     bash,
     ...((await sandbox.available()) ? [runCode] : []),
-    ...(web ? [...(web.canSearch() ? [webSearch] : []), webFetch] : []),
+    // web_search is offered even without a SearXNG address: its error tells the model (and so the user) to add one,
+    // where leaving it out had models guess addresses for web_fetch
+    ...(web ? [webSearch, webFetch] : []),
     readFileTool,
     writeFileTool,
     editFileTool,

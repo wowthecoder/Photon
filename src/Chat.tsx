@@ -37,6 +37,8 @@ export function Chat({ chat, model, models, engine, streaming, approval, web, on
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  // read when the menu opens: why search can't work, or ""
+  const [searchProblem, setSearchProblem] = useState("");
   const connected = useConnectors().filter((c) => c.status === "on");
   const connectorsOn = connected.filter((c) => !disabledConnectors.includes(c.id)).length;
   const messages = chat?.messages ?? [];
@@ -169,7 +171,7 @@ export function Chat({ chat, model, models, engine, streaming, approval, web, on
         <button type="button" className="icon-btn plus-btn" popoverTarget="composer-menu" title="Attach a file or turn web search on or off" aria-label="Attach a file or turn web search on or off">
           <PlusIcon />
         </button>
-        <div id="composer-menu" popover="auto" className="composer-menu" ref={menuRef}>
+        <div id="composer-menu" popover="auto" className="composer-menu" ref={menuRef} onToggle={(e) => e.newState === "open" && window.photon?.searchProblem().then(setSearchProblem)}>
           <button
             type="button"
             className="menu-item"
@@ -185,6 +187,7 @@ export function Chat({ chat, model, models, engine, streaming, approval, web, on
             Web search
             <input type="checkbox" role="switch" className="switch" checked={web} onChange={(e) => onWebChange(e.target.checked)} />
           </label>
+          {web && searchProblem && <p className="menu-note muted small">{searchProblem}</p>}
           <button type="button" className="menu-item connectors-item" popoverTarget="connectors-menu">
             <ConnectorsIcon />
             Connectors
