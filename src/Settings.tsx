@@ -74,20 +74,15 @@ export function Settings({ open, settings, models, info, onChange, onClose }: Pr
           <span className="muted small">Models read and write files here, and run code here, without asking. Put files in it to share them. Anywhere else, Photon asks first.</span>
         </div>
         <div className="field">
-          <label className="check">
-            <input type="checkbox" checked={settings.web} onChange={(e) => set("web", e.target.checked)} />
-            Let models search and read the web
-          </label>
-          <span className="muted small">Searches go to your SearXNG, and pages are loaded from their websites. Photon asks before opening an address that isn't already in the chat.</span>
-          {settings.web && (
-            <div className="folder">
-              <input type="url" placeholder="SearXNG address, e.g. http://127.0.0.1:8888" value={url} onChange={(e) => setUrl(e.target.value)} />
-              <button className="secondary-btn" disabled={url.trim().replace(/\/+$/, "") === savedUrl} onClick={() => saveUrl(url)}>Save</button>
-            </div>
-          )}
-          {settings.web && (urlError || !savedUrl) && (
-            <span className="muted small">{urlError || "Without a SearXNG address, models can read pages but not search. The README shows how to run SearXNG on your Mac."}</span>
-          )}
+          Web search
+          <div className="folder">
+            <input type="url" placeholder="Your SearXNG address (optional)" value={url} onChange={(e) => setUrl(e.target.value)} />
+            <button className="secondary-btn" disabled={url.trim().replace(/\/+$/, "") === savedUrl} onClick={() => saveUrl(url)}>Save</button>
+          </div>
+          <span className="muted small">
+            {urlError ||
+              `${savedUrl ? "Searches go to your SearXNG." : "Photon runs SearXNG itself with Docker or Apple's container, starting it on the first search. To use your own instead, enter its address."} Pages are loaded from their websites. Turn web search on or off from the + in the message box.`}
+          </span>
         </div>
         <label>
           Appearance

@@ -3,7 +3,8 @@ import Markdown from "react-markdown";
 import type { Approval, Attachment, Chat as ChatT, ToolCall } from "./store";
 import { inputsOf, modelLabel, type LocalModel } from "./llm";
 import { AUDIO_ACCEPT, attachmentUrl, saveAttachment } from "./attachments";
-import { AttachIcon, NewChatIcon, SendIcon, SidebarIcon, StopIcon } from "./icons";
+import { connectorIcon, useConnectors } from "./Connectors";
+import { AttachIcon, ChevronRightIcon, ConnectorsIcon, GlobeIcon, NewChatIcon, PlusIcon, SendIcon, SidebarIcon, StopIcon } from "./icons";
 
 type Props = {
   chat: ChatT | undefined;
@@ -12,6 +13,13 @@ type Props = {
   engine: EngineState;
   streaming: boolean;
   approval: Approval | null;
+  // whether models may search and read the web, switched from the + menu
+  web: boolean;
+  onWebChange: (on: boolean) => void;
+  // connected connectors switched off in the + menu, so their tools stay out of the model's prompt
+  disabledConnectors: string[];
+  onConnectorChange: (id: string, on: boolean) => void;
+  onOpenConnectors: () => void;
   sidebarOpen: boolean;
   onModelChange: (model: string) => void;
   onSend: (text: string, attachments: Attachment[]) => void;
@@ -21,12 +29,18 @@ type Props = {
   onOpenModels: () => void;
 };
 
-export function Chat({ chat, model, models, engine, streaming, approval, sidebarOpen, onModelChange, onSend, onStop, onNew, onExpand, onOpenModels }: Props) {
+export function Chat({ chat, model, models, engine, streaming, approval, web, onWebChange, disabledConnectors, onConnectorChange, onOpenConnectors, sidebarOpen, onModelChange, onSend, onStop, onNew, onExpand, onOpenModels }: Props) {
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<Attachment[]>([]);
   const [attachError, setAttachError] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // read when the menu opens: why search can't work, or ""
+  const [searchProblem, setSearchProblem] = useState("");
+  const connected = useConnectors().filter((c) => c.status === "on");
+  const connectorsOn = connected.filter((c) => !disabledConnectors.includes(c.id)).length;
   const messages = chat?.messages ?? [];
   const selected = models.find((m) => m.id === model);
   const canSend = engine.status === "ready" && !!selected && !streaming;
@@ -153,12 +167,52 @@ export function Chat({ chat, model, models, engine, streaming, approval, sidebar
             ))}
           </div>
         )}
-        {accepts && (
-          <label className="icon-btn attach-btn" title={`Attach ${inputs.includes("image") && inputs.includes("audio") ? "an image or audio" : inputs.includes("image") ? "an image" : "audio"}`}>
+        {/* a native popover: it closes on Escape and on a click outside, and sits above the + by CSS anchor positioning */}
+        <button type="button" className="icon-btn plus-btn" popoverTarget="composer-menu" title="Attach a file or turn web search on or off" aria-label="Attach a file or turn web search on or off">
+          <PlusIcon />
+        </button>
+        <div id="composer-menu" popover="auto" className="composer-menu" ref={menuRef} onToggle={(e) => e.newState === "open" && window.photon?.searchProblem().then(setSearchProblem)}>
+          <button
+            type="button"
+            className="menu-item"
+            disabled={!accepts || streaming}
+            title={accepts ? undefined : `${selected ? modelLabel(model) : "This model"} can't read images or audio`}
+            onClick={() => (menuRef.current?.hidePopover(), fileRef.current?.click())}
+          >
             <AttachIcon />
-            <input type="file" hidden multiple accept={accepts} disabled={streaming} onChange={(e) => (attach(e.target.files), (e.target.value = ""))} />
+            Attach {inputs.includes("image") && inputs.includes("audio") ? "an image or audio" : inputs.includes("audio") ? "audio" : "an image"}
+          </button>
+          <label className="menu-item">
+            <GlobeIcon />
+            Web search
+            <input type="checkbox" role="switch" className="switch" checked={web} onChange={(e) => onWebChange(e.target.checked)} />
           </label>
-        )}
+          {web && searchProblem && <p className="menu-note muted small">{searchProblem}</p>}
+          <button type="button" className="menu-item connectors-item" popoverTarget="connectors-menu">
+            <ConnectorsIcon />
+            Connectors
+            <span className="menu-end">
+              {connected.length > 0 && <span className="muted small">{connectorsOn} of {connected.length} on</span>}
+              <ChevronRightIcon />
+            </span>
+          </button>
+          {/* nested in the menu, so opening it keeps the menu open */}
+          <div id="connectors-menu" popover="auto" className="composer-menu connectors-menu">
+            {connected.length === 0 && <p className="menu-note muted small">No connectors are connected.</p>}
+            {connected.map((c) => (
+              <label key={c.id} className="menu-item">
+                {connectorIcon(c.id) ? <img className="menu-logo" src={connectorIcon(c.id)} alt="" /> : <span className="menu-logo letter">{c.name[0]}</span>}
+                {c.name}
+                <input type="checkbox" role="switch" className="switch" checked={!disabledConnectors.includes(c.id)} onChange={(e) => onConnectorChange(c.id, e.target.checked)} />
+              </label>
+            ))}
+            <hr />
+            <button type="button" className="menu-item" onClick={() => (menuRef.current?.hidePopover(), onOpenConnectors())}>
+              Manage connectors
+            </button>
+          </div>
+        </div>
+        <input ref={fileRef} type="file" hidden multiple accept={accepts} onChange={(e) => (attach(e.target.files), (e.target.value = ""))} />
         <textarea
           ref={inputRef}
           rows={1}

@@ -158,6 +158,7 @@ export function createMcp({ onChange, store, clients = {}, openUrl, onSignedIn =
     [...live.entries()].flatMap(([id, s]) =>
       (s.tools ?? []).map((t) => ({
         name: `${id}_${t.name}`,
+        connector: id,
         description: t.description ?? "",
         parameters: t.inputSchema,
         // tools that don't say they only read ask the user first

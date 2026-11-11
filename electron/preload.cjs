@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld("photon", {
   inWorkspace: (p) => ipcRenderer.invoke("workspace:contains", p),
   revealWorkspace: () => ipcRenderer.invoke("workspace:reveal"),
   searchUrl: () => ipcRenderer.invoke("search-url:get"),
+  searchProblem: () => ipcRenderer.invoke("search:problem"),
   setSearchUrl: (url) => ipcRenderer.invoke("search-url:set", url),
   info: () => ipcRenderer.invoke("info"),
   chooseModelsDir: () => ipcRenderer.invoke("models:choose-dir"),

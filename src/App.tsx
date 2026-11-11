@@ -28,13 +28,6 @@ const WEB_TOOLS = ["web_search", "web_fetch"];
 // without the second sentence, models retry the same thing with other tools, and the user gets one prompt after another
 const DECLINED = "The user declined to run this tool. Don't retry it or try to do the same thing another way: answer with what you have, or say what you'd need.";
 
-// web_fetch runs without asking when its address is already in the chat: typed by the user or returned by a tool
-// (e.g. a search result). Otherwise a page could get the model to send what's in the chat to another site in an address.
-const inChat = (call: ToolCall, messages: Message[]) => {
-  const url = (parseArgs(call.args) as { url?: unknown } | null)?.url;
-  return typeof url === "string" && url.length > 0 && messages.some((m) => (m.role === "user" && m.content.includes(url)) || m.toolCalls?.some((c) => c.result?.includes(url)));
-};
-
 // file tools run without asking when their path is in the workspace folder; the main process resolves it
 const inWorkspace = async (tool: McpTool, call: ToolCall) => {
   const path = (parseArgs(call.args) as { path?: unknown } | null)?.path;
@@ -54,7 +47,7 @@ async function runTool(call: ToolCall, signal: AbortSignal) {
   }
 }
 
-const DEFAULT_SETTINGS: SettingsT = { model: "", systemPrompt: "", temperature: 0.7, theme: "system", shell: true, web: false };
+const DEFAULT_SETTINGS: SettingsT = { model: "", systemPrompt: "", temperature: 0.7, theme: "system", shell: true, web: true, disabledConnectors: [] };
 
 export function App() {
   const [chats, setChats] = usePersistent<ChatT[]>("chats", []);
@@ -117,7 +110,9 @@ export function App() {
     try {
       // free the image model first: a chat model and an image model may not both fit in memory
       if (diffusion.status === "ready") await unloadImageModel(diffusion).catch(() => {});
-      const tools = ((await window.photon?.tools().catch(() => [])) ?? []).filter((t) => (settings.shell || t.name !== "bash") && (settings.web || !WEB_TOOLS.includes(t.name)));
+      const tools = ((await window.photon?.tools().catch(() => [])) ?? []).filter(
+        (t) => (settings.shell || t.name !== "bash") && (settings.web || !WEB_TOOLS.includes(t.name)) && !(t.connector && settings.disabledConnectors.includes(t.connector)),
+      );
       for (let round = 0; ; round++) {
         reply = { id: crypto.randomUUID(), role: "assistant", content: "" };
         update(chat.id, (c) => ({ ...c, messages: [...c.messages, reply] }));
@@ -137,7 +132,7 @@ export function App() {
           reply = { ...reply, toolCalls: [...(reply.toolCalls ?? []), call] };
           const { toolCalls } = reply;
           patch(reply.id, (m) => ({ ...m, toolCalls }));
-          const ok = !!tool && (tool.readOnly || (call.name === "web_fetch" && inChat(call, [...history, reply])) || (await inWorkspace(tool, call)) || (await ask(call, tool.warning)));
+          const ok = !!tool && (tool.readOnly || (await inWorkspace(tool, call)) || (await ask(call, tool.warning)));
           if (ctrl.signal.aborted) throw new Error("Stopped");
           const result = !tool ? `Error: there is no tool called ${call.name}.` : ok ? await runTool(call, ctrl.signal) : DECLINED;
           reply = { ...reply, toolCalls: reply.toolCalls!.map((c) => (c.id === call.id ? { ...c, result } : c)) };
@@ -216,6 +211,11 @@ export function App() {
           engine={engine}
           streaming={streaming}
           approval={approval?.chatId === active?.id ? approval : null}
+          web={settings.web}
+          onWebChange={(web) => setSettings({ ...settings, web })}
+          disabledConnectors={settings.disabledConnectors}
+          onConnectorChange={(id, on) => setSettings({ ...settings, disabledConnectors: on ? settings.disabledConnectors.filter((c) => c !== id) : [...settings.disabledConnectors, id] })}
+          onOpenConnectors={() => setView("connectors")}
           sidebarOpen={sidebarOpen}
           onModelChange={(model) => (active ? update(active.id, (c) => ({ ...c, model })) : setSettings({ ...settings, model }))}
           onSend={send}

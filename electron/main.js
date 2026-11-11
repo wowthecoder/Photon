@@ -7,6 +7,7 @@ import { createEngine } from "./engine.js";
 import { createImageModels } from "./imageModels.js";
 import { createMcp } from "./mcp.js";
 import { inWorkspace, resolvePath } from "./files.js";
+import { createSearxng } from "./searxng.js";
 import { createTools } from "./tools.js";
 import { createPageReader, search } from "./web.js";
 
@@ -69,16 +70,22 @@ const mcp = createMcp({
   onSignedIn: () => (app.focus({ steal: true }), BrowserWindow.getAllWindows()[0]?.show()),
 });
 
-// The SearXNG instance web_search asks, e.g. http://127.0.0.1:8888
+// The SearXNG web_search asks: the user's own (e.g. http://127.0.0.1:8888), or else one Photon runs itself
 const searchUrl = () => readConfig().searchUrl;
-let readPage; // made on first use: sessions need the app to be ready
+const searxng = createSearxng({ dir: () => path.join(app.getPath("userData"), "searxng") });
+let pageReader; // made on first use: sessions need the app to be ready
+const pages = () => (pageReader ??= createPageReader({ BrowserWindow, session }));
 const workspace = () => path.join(app.getPath("userData"), "workspace");
 const builtins = createTools({
   workspace,
   web: {
-    canSearch: () => !!searchUrl(),
-    search: (query, signal) => search(query, searchUrl(), { signal }),
-    read: (url, opts) => (readPage ??= createPageReader({ BrowserWindow, session }))(url, opts),
+    search: async (query, { read, signal }) => {
+      const load = read ? pages().load : undefined;
+      if (searchUrl()) return search(query, searchUrl(), { signal, load });
+      const own = await searxng.url(signal);
+      return own.error ? `Error: ${own.error}` : search(query, own.url, { signal, load });
+    },
+    read: (url, opts) => pages().read(url, opts),
   },
 });
 // Tool calls in progress, by tool call id, so Stop can cancel them
@@ -166,6 +173,10 @@ ipcMain.handle("tools:cancel", (_, id) => running.get(id)?.abort());
 ipcMain.handle("workspace:contains", (_, p) => typeof p === "string" && !!p.trim() && inWorkspace(resolvePath(p.trim(), workspace()), workspace()));
 ipcMain.handle("workspace:reveal", () => (fs.mkdirSync(workspace(), { recursive: true }), shell.openPath(workspace())));
 ipcMain.handle("search-url:get", () => searchUrl() ?? "");
+// why web_search can't work, for the + menu: "" when it can
+ipcMain.handle("search:problem", async () =>
+  searchUrl() || (await searxng.available()) ? "" : "Models can read pages but not search: install Docker or Apple's container, or add a SearXNG address in Settings.",
+);
 ipcMain.handle("search-url:set", (_, url) => {
   url = typeof url === "string" ? url.trim().replace(/\/+$/, "") : "";
   if (url && !/^https?:\/\/[^/]+/.test(url)) throw new Error("The SearXNG address must start with http:// or https://");
@@ -223,4 +234,4 @@ app.whenReady().then(() => {
 });
 app.on("activate", () => BrowserWindow.getAllWindows().length === 0 && createWindow());
 app.on("window-all-closed", () => process.platform !== "darwin" && app.quit());
-app.on("will-quit", () => (llm.stop(), sd.stop()));
+app.on("will-quit", () => (llm.stop(), sd.stop(), searxng.stop()));

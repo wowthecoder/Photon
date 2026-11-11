@@ -12,8 +12,9 @@ export type Chat = { id: string; title: string; model: string; messages: Message
 export type View = "chat" | "models" | "images" | "connectors";
 export type Theme = "system" | "light" | "dark";
 // shell: whether the model may ask to run shell commands (the bash tool)
-// web: whether the model may search and read the web (web_search, web_fetch); off until the user turns it on
-export type Settings = { model: string; systemPrompt: string; temperature: number; theme: Theme; shell: boolean; web: boolean };
+// web: whether the model may search and read the web (web_search, web_fetch); switched from the + in the message box
+// disabledConnectors: connected connectors switched off in the + menu; their tools aren't sent to the model
+export type Settings = { model: string; systemPrompt: string; temperature: number; theme: Theme; shell: boolean; web: boolean; disabledConnectors: string[] };
 
 // ponytail: rewrites the whole key on every change (incl. each streamed token); move chats to backend/SQLite when history grows
 export function usePersistent<T>(key: string, initial: T) {

@@ -371,7 +371,38 @@ button { background: none; border: 0; cursor: pointer; }
 
 .composer { flex-wrap: wrap; }
 .composer-note { width: min(760px, calc(100% - 48px)); margin: 0 auto 6px; color: var(--warn); font-size: 12px; }
-.attach-btn { flex-shrink: 0; cursor: pointer; }
+.plus-btn { flex-shrink: 0; margin-left: -8px; anchor-name: --composer-plus; }
+.composer-menu {
+  position-anchor: --composer-plus;
+  position-area: top span-right;
+  position-try-fallbacks: flip-block;
+  inset: auto;
+  margin: 0 0 8px;
+  min-width: 220px;
+  max-width: 280px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
+}
+.menu-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 8px; text-align: left; cursor: pointer; }
+.menu-item:hover:not(:disabled) { background: var(--hover); }
+.menu-item:disabled { color: var(--muted); cursor: default; }
+.menu-item svg { flex-shrink: 0; color: var(--muted); }
+.menu-end { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.menu-note { margin: 0; padding: 8px 10px; }
+.menu-logo { width: 18px; height: 18px; flex-shrink: 0; border-radius: 4px; object-fit: contain; }
+.menu-logo.letter { display: grid; place-items: center; background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 600; }
+.composer-menu hr { margin: 4px 6px; border: 0; border-top: 1px solid var(--border); }
+.connectors-item { anchor-name: --connectors-item; }
+.connectors-menu { position-anchor: --connectors-item; position-area: right span-top; position-try-fallbacks: flip-inline; margin: 0 0 0 8px; }
+.switch { appearance: none; position: relative; flex-shrink: 0; width: 32px; height: 18px; margin: 0 0 0 auto; border-radius: 9px; background: var(--border); cursor: pointer; transition: background 0.15s; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #ffffff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); transition: transform 0.15s; }
+.switch:checked { background: var(--accent); }
+.switch:checked::after { background: var(--accent-text); transform: translateX(14px); }
+.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pending { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
 .pending-item { position: relative; display: flex; align-items: center; border-radius: 10px; background: var(--surface); }
 .pending-item.image img { display: block; width: 64px; height: 64px; object-fit: cover; border-radius: 10px; }

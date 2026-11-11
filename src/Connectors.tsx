@@ -6,16 +6,24 @@ const ICONS: Record<string, string> = Object.fromEntries(
   Object.entries(import.meta.glob<string>("./connector-icons/*.svg", { eager: true, query: "?url", import: "default" })).map(([file, url]) => [file.split("/").pop()!.replace(".svg", ""), url]),
 );
 
-type Props = { sidebarOpen: boolean; onExpand: () => void };
+export const connectorIcon = (id: string): string | undefined => ICONS[id];
 
-export function Connectors({ sidebarOpen, onExpand }: Props) {
+// the connectors and their status, kept current as they sign in and out
+export function useConnectors() {
   const [connectors, setConnectors] = useState<Connector[]>([]);
-  const [query, setQuery] = useState("");
   useEffect(() => {
     if (!window.photon) return;
     window.photon.connectors().then(setConnectors);
     return window.photon.onConnectors(setConnectors);
   }, []);
+  return connectors;
+}
+
+type Props = { sidebarOpen: boolean; onExpand: () => void };
+
+export function Connectors({ sidebarOpen, onExpand }: Props) {
+  const connectors = useConnectors();
+  const [query, setQuery] = useState("");
 
   const q = query.trim().toLowerCase();
   const shown = connectors.filter((c) => `${c.name} ${c.description}`.toLowerCase().includes(q));

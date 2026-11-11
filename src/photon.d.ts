@@ -25,7 +25,8 @@ type Connector = { id: string; name: string; description: string; status: "off" 
 // a tool the model can call: a connector's (<connector id>_<tool>) or one built into Photon (e.g. bash)
 // warning: what the approval prompt says the tool may do
 // askOutsideWorkspace: runs without asking when its path argument is in Photon's workspace folder (file tools)
-type McpTool = { name: string; description: string; parameters: object; readOnly: boolean; warning?: string; askOutsideWorkspace?: boolean };
+// connector: the id of the connector a tool comes from; built-in tools have none
+type McpTool = { name: string; description: string; parameters: object; readOnly: boolean; warning?: string; askOutsideWorkspace?: boolean; connector?: string };
 
 interface Window {
   photon?: {
@@ -59,8 +60,10 @@ interface Window {
     revealWorkspace(): Promise<void>;
     /** the SearXNG address web_search uses; "" when there's none */
     searchUrl(): Promise<string>;
-    /** an empty address removes it */
+    /** an empty address removes it, and Photon runs its own SearXNG */
     setSearchUrl(url: string): Promise<void>;
+    /** why web_search can't work (no address and no container runtime); "" when it can */
+    searchProblem(): Promise<string>;
     info(): Promise<SystemInfo>;
     chooseModelsDir(): Promise<boolean>;
     revealModelsDir(): Promise<void>;

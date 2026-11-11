@@ -2,7 +2,7 @@
 
 A ChatGPT-style desktop chat app for macOS that runs language models entirely on your Mac. It's built with Electron, React, Vite and TypeScript, and uses llama.cpp's `llama-server` to run the models.
 
-You browse GGUF models on Hugging Face, download them inside the app, and chat with them. It also generates images locally, using stable-diffusion.cpp's `sd-server`. No data leaves your machine except the model downloads, the Hugging Face catalog searches, and what you let models send: connector tool calls, and web searches and pages if you turn the web on.
+You browse GGUF models on Hugging Face, download them inside the app, and chat with them. It also generates images locally, using stable-diffusion.cpp's `sd-server`. No data leaves your machine except the model downloads, the Hugging Face catalog searches, and what you let models send: connector tool calls, and web searches and pages while web search is on.
 
 ## Requirements
 
@@ -42,7 +42,7 @@ node scripts/fetch-sd.js
 | `npm start` | Builds the UI and runs it in Electron without the dev server. |
 | `npm run dist` | Packages `release/Photon-<version>-arm64.dmg`, with llama.cpp and sd-server bundled. |
 | `npm run web` | Runs only the UI at http://localhost:1420 in a browser. The model engine isn't available there. |
-| `npm test` | Runs the catalog checks (quantization names, grouping, default quant) the image catalog checks (grouping by base model) the downloader checks (resume, size mismatch) the connector checks (against a stub MCP server), the tool checks (bash output, timeout and Stop; run_code against a stand-in for Docker) the web checks (blocked addresses, SearXNG results against a stub, page text) and the file checks (the workspace boundary with symlinks, reading in parts, edits). |
+| `npm test` | Runs the catalog checks (quantization names, grouping, default quant) the image catalog checks (grouping by base model) the downloader checks (resume, size mismatch) the connector checks (against a stub MCP server), the tool checks (bash output, timeout and Stop; run_code against a stand-in for Docker) the web checks (blocked addresses, SearXNG results and instant answers against a stub, choosing passages, reading the top pages) the file checks (the workspace boundary with symlinks, reading in parts, edits) and the SearXNG checks (starting, sharing and removing its container, against a stand-in for Docker). |
 
 Hot reload covers everything in `src/`. If you change anything in `electron/`, stop `npm run dev` and start it again.
 
@@ -55,13 +55,13 @@ The `.dmg` isn't code-signed. The first time you open it, macOS will block it: r
 3. Click a model to see where you can download it from: the official publisher and the trusted quantizers (ggml-org, unsloth, bartowski, lmstudio-community). Each source has a quantization picker with exact file sizes, defaulting to a 4-bit file.
 4. Click **Download**. Progress appears there and in **Text → Downloaded**, where you can pause, resume or delete.
 5. Start a new chat (⌘N) and pick the model in the header. It loads into memory on the first message.
-6. Models marked **Vision** or **Audio** can read attachments. With one selected, click the paperclip in the message box, paste an image, or drop a file on it. Images are sent as PNG; audio can be MP3, WAV or FLAC. Attachments are saved in `~/Library/Application Support/Photon/attachments` and deleted with their chat.
+6. Models marked **Vision** or **Audio** can read attachments. With one selected, click **+** in the message box and choose **Attach**, paste an image, or drop a file on the box. Images are sent as PNG; audio can be MP3, WAV or FLAC. Attachments are saved in `~/Library/Application Support/Photon/attachments` and deleted with their chat.
 
 To let a model use your GitHub, Gmail or Google Drive account:
 
 1. Open **Connectors** in the sidebar and click **+** next to it. (Each needs an OAuth app first; see [Connectors setup](#connectors-setup).)
 2. Your browser opens the provider's sign-in page. Approve Photon and you're sent back to the app.
-3. Chat with a model that supports tool calling (Qwen3, gpt-oss, Llama 3.2 and others). Tools that only read run straight away; Photon asks before running anything else. After 20 rounds of tool calls the model has to answer without them.
+3. Chat with a model that supports tool calling (Qwen3, gpt-oss, Llama 3.2 and others). To keep a connector's tools out of the model's prompt (small models get confused by dozens of tools), switch it off under **+ → Connectors** in the message box; it stays connected. Tools that only read run straight away; Photon asks before running anything else. After 20 rounds of tool calls the model has to answer without them.
 
 Photon talks to each provider's MCP server from the main process. Sign-ins are kept in `config.json`, encrypted with the macOS keychain. Clicking the check on a connected card forgets the sign-in; to revoke Photon's access completely, also remove it in your account (GitHub → Settings → Applications, or https://myaccount.google.com/connections).
 
@@ -74,19 +74,14 @@ With Docker or Apple's [container](https://github.com/apple/container) installed
 - **Apple's container** (macOS 26): run `brew install container` (or install the `.pkg` from its [releases](https://github.com/apple/container/releases)), and Photon does the rest: the first run after each launch starts its service (`container system start`) and, on a fresh install, downloads its Linux kernel. Photon creates a host-only network, `photon-sandbox`, for its containers: Apple's runtime has no way to turn networking off, so a container can't reach the internet but can reach services on your Mac that listen on more than `127.0.0.1`.
 - **Docker** (Docker Desktop, OrbStack or Colima): start it, and Photon uses it when Apple's container isn't installed. Containers get no network at all.
 
-Models can also search and read the web once you turn on **Settings → Let models search and read the web**. It's off until you do.
+Models can also search and read the web. It's on by default; switch it off with **+ → Web search** in the message box.
 
-- `web_fetch` reads a page and gives the model its text, 8,000 characters at a time. It runs without asking when the address is already in the chat (you typed it, or a search found it). For any other address Photon asks first, since a page could trick the model into putting your chat in an address. Pages load in a hidden window with its own session (none of Photon's cookies), without images, downloads or pop-ups, and they can't reach your Mac or local network (`localhost`, `192.168.x.x` and the like), including through redirects.
-- `web_search` asks a [SearXNG](https://docs.searxng.org) instance: free, no account, and it queries the search engines for you. Most public instances block apps, so run your own and put its address in Settings. With Apple's container (see `run_code` below):
-  ```bash
-  mkdir -p ~/searxng && printf 'use_default_settings: true\nserver:\n  secret_key: "%s"\n  limiter: false\nsearch:\n  formats: [html, json]\n' "$(openssl rand -hex 32)" > ~/searxng/settings.yml
-  ```
-  ```bash
-  container run -d --name searxng -p 127.0.0.1:8888:8080 -v ~/searxng:/etc/searxng searxng/searxng
-  ```
-  Then put `http://127.0.0.1:8888` in Settings. `formats` must include `json`, or SearXNG refuses Photon. After a restart, start it again with `container start searxng`. With Docker, run the same command with `docker`.
+- `web_fetch` reads a page and gives the model its text, 8,000 characters at a time. It runs without asking, like `web_search`. That means a page could, in principle, trick a model into putting text from your chat in an address it fetches; turn web search off for chats you'd rather keep away from the web. Pages load in a hidden window with its own session (none of Photon's cookies), without images, downloads or pop-ups, and they can't reach your Mac or local network (`localhost`, `192.168.x.x` and the like), including through redirects.
+- `web_search` returns any instant answer (an answer from an engine that gives one, or a Wikipedia/Wikidata summary box), then the top results. It also reads the top 3 pages, in parallel and for up to 8 seconds each, and adds the passages that share the most words with the query, so one call usually brings back the facts and not only addresses. Pages that block Photon are marked as such. A model can pass `read: false` for just the list. Searches go to [SearXNG](https://docs.searxng.org): free, no account, and it asks other search engines (Google, Bing, Brave, Wikipedia and more) and merges their results. Photon runs its own with Docker or Apple's container (see `run_code` below): the first search after each launch starts a `photon-searxng` container on a free port on `127.0.0.1` (about 25 seconds from cold, about a second per search after that), and quitting Photon removes it. Its settings, with JSON turned on and a random secret, are in `~/Library/Application Support/Photon/searxng/settings.yml`. Without Docker or Apple's container, `web_search` tells the model it can't search, and the **+** menu says so too.
 
-  The first time something connects to the published port, macOS asks whether `container-runtime-linux` may find and connect to devices on your local network: Apple's runtime forwards the port to the container's own address (`192.168.64.x`), which macOS counts as the local network. Allow it. Until you do, every connection is reset and the runtime logs `No route to host` (see `container system logs`). To check or change it later: **System Settings → Privacy & Security → Local Network**. macOS remembers the permission by the program's path, so it may ask again after `brew upgrade container`.
+  To use a SearXNG of your own instead, put its address in **Settings → Web search**. Its settings must list `json` under `search.formats`, or it refuses Photon.
+
+  With Apple's container, the first search may make macOS ask whether `container-runtime-linux` may find and connect to devices on your local network: Apple's runtime forwards the port to the container's own address (`192.168.64.x`), which macOS counts as the local network. Allow it. Until you do, every connection is reset, the runtime logs `No route to host` (see `container system logs`), and the search says Photon can't reach SearXNG. To check or change it later: **System Settings → Privacy & Security → Local Network**. macOS remembers the permission by the program's path, so it may ask again after `brew upgrade container`.
 
 To generate images:
 
@@ -193,6 +188,7 @@ electron/imageFamilies.json  Supported image base models: recipe, text encoder a
 electron/tools.js     Tools built into Photon: bash, run_code, web_search, web_fetch, the file tools (tested by tools.test.js)
 electron/files.js     read_file, write_file, edit_file, and the workspace boundary (tested by files.test.js)
 electron/web.js       SearXNG search, and reading pages in a hidden window (tested by web.test.js)
+electron/searxng.js   The SearXNG container Photon runs for web_search (tested by searxng.test.js)
 electron/download.js  Resumable file download (tested by download.test.js)
 electron/preload.cjs  Exposes window.photon (engine state, folder actions) to the UI
 scripts/dev.js        Starts Vite, then Electron pointed at it
