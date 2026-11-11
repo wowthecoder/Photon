@@ -24,5 +24,11 @@
     "scope": "https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file",
     "oauthApp": "google",
     "authParams": { "access_type": "offline", "prompt": "consent" }
+  },
+  {
+    "id": "notion",
+    "name": "Notion",
+    "description": "Search, read and edit pages and databases",
+    "url": "https://mcp.notion.com/mcp"
   }
 ]

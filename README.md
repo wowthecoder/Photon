@@ -97,6 +97,10 @@ Google's MCP servers are in developer preview, so this needs a Google Cloud proj
 4. In **Google Auth Platform → Clients**, create a client of type **Web application**, tick **Use this client for an AI-powered agent**, and add the redirect URI `http://127.0.0.1:53682/callback`.
 5. Put its client ID and secret under `"google"`, with `"redirectPort": 53682`. Web application clients need the exact callback URL, so Photon always listens on that port for Google. Gmail and Drive share this client, but each is signed in separately.
 
+### Notion
+
+Nothing to set up. Notion's server lets Photon register itself, so click **+** and pick the pages Photon may use.
+
 ### Adding a connector
 
 A connector is a remote MCP server that signs in with OAuth. To add one:
